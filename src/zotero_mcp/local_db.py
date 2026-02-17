@@ -5,13 +5,13 @@ Provides direct SQLite access to Zotero's local database for faster semantic sea
 when running in local mode.
 """
 
-import os
-import sqlite3
-import platform
 import logging
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
+import os
+import platform
+import sqlite3
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 from .utils import is_local_mode
 
@@ -19,6 +19,7 @@ from .utils import is_local_mode
 @dataclass
 class ZoteroItem:
     """Represents a Zotero item with text content for semantic search."""
+
     item_id: int
     key: str
     item_type_id: int
@@ -60,7 +61,11 @@ class ZoteroItem:
 
         if self.fulltext:
             # Truncate fulltext to avoid overly long documents
-            truncated_fulltext = self.fulltext[:5000] + "..." if len(self.fulltext) > 5000 else self.fulltext
+            truncated_fulltext = (
+                self.fulltext[:5000] + "..."
+                if len(self.fulltext) > 5000
+                else self.fulltext
+            )
             parts.append(f"Content: {truncated_fulltext}")
 
         return "\n\n".join(parts)
@@ -109,7 +114,12 @@ class LocalZoteroReader:
             db_path = Path.home() / "Zotero" / "zotero.sqlite"
             if not db_path.exists():
                 # Fallback to XP/2000 location
-                db_path = Path(os.path.expanduser("~/Documents and Settings")) / os.getenv("USERNAME", "") / "Zotero" / "zotero.sqlite"
+                db_path = (
+                    Path(os.path.expanduser("~/Documents and Settings"))
+                    / os.getenv("USERNAME", "")
+                    / "Zotero"
+                    / "zotero.sqlite"
+                )
         else:  # Linux and others
             db_path = Path.home() / "Zotero" / "zotero.sqlite"
 
@@ -142,8 +152,7 @@ class LocalZoteroReader:
     def _iter_parent_attachments(self, parent_item_id: int):
         """Yield tuples (attachment_key, path, content_type) for a parent item."""
         conn = self._get_connection()
-        query = (
-            """
+        query = """
             SELECT ia.itemID as attachmentItemID,
                    ia.parentItemID as parentItemID,
                    ia.path as path,
@@ -153,11 +162,12 @@ class LocalZoteroReader:
             JOIN items att ON att.itemID = ia.itemID
             WHERE ia.parentItemID = ?
             """
-        )
         for row in conn.execute(query, (parent_item_id,)):
             yield row["attachmentKey"], row["path"], row["contentType"]
 
-    def _resolve_attachment_path(self, attachment_key: str, zotero_path: str) -> Path | None:
+    def _resolve_attachment_path(
+        self, attachment_key: str, zotero_path: str
+    ) -> Path | None:
         """Resolve a Zotero attachment path like 'storage:filename.pdf' to a filesystem path."""
         if not zotero_path:
             return None
@@ -174,6 +184,7 @@ class LocalZoteroReader:
         """Extract text from a PDF using pdfminer with a page cap to avoid stalls."""
         try:
             from pdfminer.high_level import extract_text  # type: ignore
+
             # Determine page cap: config value > env > default (10)
             if isinstance(self.pdf_max_pages, int) and self.pdf_max_pages > 0:
                 maxpages = self.pdf_max_pages
@@ -193,6 +204,7 @@ class LocalZoteroReader:
         # Try markitdown first
         try:
             from markitdown import MarkItDown
+
             md = MarkItDown()
             result = md.convert(str(file_path))
             return result.text_content or ""
@@ -201,6 +213,7 @@ class LocalZoteroReader:
         # Fallback using a simple parser
         try:
             from bs4 import BeautifulSoup  # type: ignore
+
             html = file_path.read_text(errors="ignore")
             return BeautifulSoup(html, "html.parser").get_text(" ")
         except Exception:
@@ -250,7 +263,11 @@ class LocalZoteroReader:
         if not text:
             return None
         # Truncate to keep embeddings reasonable
-        source = "pdf" if target.suffix.lower() == ".pdf" else ("html" if target.suffix.lower() in {".html", ".htm"} else "file")
+        source = (
+            "pdf"
+            if target.suffix.lower() == ".pdf"
+            else ("html" if target.suffix.lower() in {".html", ".htm"} else "file")
+        )
         return (text[:10000], source)
 
     def close(self):
@@ -268,8 +285,7 @@ class LocalZoteroReader:
     def get_libraries(self) -> list[dict[str, Any]]:
         """Get all libraries (user, group, feed) from the database."""
         conn = self._get_connection()
-        rows = conn.execute(
-            """
+        rows = conn.execute("""
             SELECT l.libraryID, l.type, l.editable,
                    g.groupID, g.name as groupName, g.description as groupDescription,
                    f.name as feedName, f.url as feedUrl,
@@ -282,15 +298,13 @@ class LocalZoteroReader:
             LEFT JOIN groups g ON l.libraryID = g.libraryID
             LEFT JOIN feeds f ON l.libraryID = f.libraryID
             ORDER BY l.type, l.libraryID
-            """
-        ).fetchall()
+            """).fetchall()
         return [dict(row) for row in rows]
 
     def get_groups(self) -> list[dict[str, Any]]:
         """Get all group libraries with item counts."""
         conn = self._get_connection()
-        rows = conn.execute(
-            """
+        rows = conn.execute("""
             SELECT g.groupID, g.libraryID, g.name, g.description,
                    (SELECT COUNT(*) FROM items i
                     JOIN itemTypes it ON i.itemTypeID = it.itemTypeID
@@ -298,15 +312,13 @@ class LocalZoteroReader:
                     AND it.typeName NOT IN ('attachment', 'note', 'annotation')) as itemCount
             FROM groups g
             ORDER BY g.name
-            """
-        ).fetchall()
+            """).fetchall()
         return [dict(row) for row in rows]
 
     def get_feeds(self) -> list[dict[str, Any]]:
         """Get all RSS feed subscriptions with item counts."""
         conn = self._get_connection()
-        rows = conn.execute(
-            """
+        rows = conn.execute("""
             SELECT f.libraryID, f.name, f.url,
                    f.lastCheck, f.lastUpdate, f.lastCheckError,
                    f.refreshInterval,
@@ -315,13 +327,10 @@ class LocalZoteroReader:
                     WHERE i.libraryID = f.libraryID) as itemCount
             FROM feeds f
             ORDER BY f.name
-            """
-        ).fetchall()
+            """).fetchall()
         return [dict(row) for row in rows]
 
-    def get_feed_items(
-        self, library_id: int, limit: int = 20
-    ) -> list[dict[str, Any]]:
+    def get_feed_items(self, library_id: int, limit: int = 20) -> list[dict[str, Any]]:
         """Get items from a specific RSS feed by its libraryID."""
         conn = self._get_connection()
         rows = conn.execute(
@@ -332,6 +341,7 @@ class LocalZoteroReader:
                    title_val.value as title,
                    abstract_val.value as abstract,
                    url_val.value as url,
+                   doi_val.value as doi,
                    GROUP_CONCAT(
                        CASE
                            WHEN c.firstName IS NOT NULL AND c.lastName IS NOT NULL
@@ -350,6 +360,9 @@ class LocalZoteroReader:
             LEFT JOIN fields url_f ON url_f.fieldName = 'url'
             LEFT JOIN itemData url_data ON i.itemID = url_data.itemID AND url_data.fieldID = url_f.fieldID
             LEFT JOIN itemDataValues url_val ON url_data.valueID = url_val.valueID
+            LEFT JOIN fields doi_f ON doi_f.fieldName = 'DOI'
+            LEFT JOIN itemData doi_data ON i.itemID = doi_data.itemID AND doi_data.fieldID = doi_f.fieldID
+            LEFT JOIN itemDataValues doi_val ON doi_data.valueID = doi_val.valueID
             LEFT JOIN itemCreators ic ON i.itemID = ic.itemID
             LEFT JOIN creators c ON ic.creatorID = c.creatorID
             WHERE i.libraryID = ?
@@ -361,6 +374,27 @@ class LocalZoteroReader:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    def search_feed_items_by_title(
+        self, library_id: int, title_query: str, limit: int = 10
+    ) -> list[dict[str, Any]]:
+        """Search feed items by title with case-insensitive substring matching.
+
+        Results are ranked with exact (case-insensitive) matches first,
+        then substring matches, ordered by dateAdded descending.
+        """
+        conn = self._get_connection()
+        query_lower = title_query.lower()
+        items = self.get_feed_items(library_id, limit=200)
+        exact = []
+        partial = []
+        for item in items:
+            t = (item.get("title") or "").lower()
+            if t == query_lower:
+                exact.append(item)
+            elif query_lower in t:
+                partial.append(item)
+        return (exact + partial)[:limit]
+
     def get_item_count(self) -> int:
         """
         Get total count of non-attachment items.
@@ -369,17 +403,17 @@ class LocalZoteroReader:
             Number of items in the library.
         """
         conn = self._get_connection()
-        cursor = conn.execute(
-            """
+        cursor = conn.execute("""
             SELECT COUNT(*)
             FROM items i
             JOIN itemTypes it ON i.itemTypeID = it.itemTypeID
             WHERE it.typeName NOT IN ('attachment', 'note', 'annotation')
-            """
-        )
+            """)
         return cursor.fetchone()[0]
 
-    def get_items_with_text(self, limit: int | None = None, include_fulltext: bool = False) -> list[ZoteroItem]:
+    def get_items_with_text(
+        self, limit: int | None = None, include_fulltext: bool = False
+    ) -> list[ZoteroItem]:
         """
         Get all items with their text content for semantic search.
 
@@ -457,20 +491,27 @@ class LocalZoteroReader:
 
         for row in cursor:
             item = ZoteroItem(
-                item_id=row['itemID'],
-                key=row['key'],
-                item_type_id=row['itemTypeID'],
-                item_type=row['item_type'],
-                doi=row['doi'],
-                title=row['title'],
-                abstract=row['abstract'],
-                creators=row['creators'],
-                fulltext=(res := (self._extract_fulltext_for_item(row['itemID']) if include_fulltext else None)) and res[0],
+                item_id=row["itemID"],
+                key=row["key"],
+                item_type_id=row["itemTypeID"],
+                item_type=row["item_type"],
+                doi=row["doi"],
+                title=row["title"],
+                abstract=row["abstract"],
+                creators=row["creators"],
+                fulltext=(
+                    res := (
+                        self._extract_fulltext_for_item(row["itemID"])
+                        if include_fulltext
+                        else None
+                    )
+                )
+                and res[0],
                 fulltext_source=res[1] if include_fulltext and res else None,
-                notes=row['notes'],
-                extra=row['extra'],
-                date_added=row['dateAdded'],
-                date_modified=row['dateModified']
+                notes=row["notes"],
+                extra=row["extra"],
+                date_added=row["dateAdded"],
+                date_modified=row["dateModified"],
             )
             items.append(item)
 
