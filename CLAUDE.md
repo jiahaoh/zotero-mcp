@@ -13,8 +13,14 @@ Zotero MCP is a Python Model Context Protocol (MCP) server that exposes ~20 tool
 uv venv --python 3.10
 uv pip install -e ".[dev]" ipykernel
 
-# Install in development mode (alternative)
+# Install core only (lightweight — no ML dependencies)
 pip install -e .
+
+# Install with optional extras
+pip install -e ".[pdf]"       # PDF conversion via markitdown
+pip install -e ".[semantic]"  # Semantic search (chromadb + sentence-transformers)
+pip install -e ".[all]"       # Everything
+pip install -e ".[dev]"       # All + dev tools
 
 # Run the server
 zotero-mcp serve --transport stdio
@@ -46,10 +52,11 @@ pre-commit run --all-files
 
 **Core modules in `src/zotero_mcp/`:**
 
-- **`server.py`** (~2100 lines) — The FastMCP server instance and all tool definitions. Tools are registered via `@mcp.tool()` decorators. This is the largest file and contains search, retrieval, annotation, and semantic search tools.
-- **`client.py`** — Zotero client factory (`get_zotero_client()`) and formatting utilities (BibTeX generation, markdown conversion, attachment handling). All tools in server.py call through this.
+- **`server.py`** (~3700 lines) — The FastMCP server instance and all tool definitions. Tools are registered via `@mcp.tool()` decorators. This is the largest file and contains search, retrieval, annotation, and semantic search tools.
+- **`client.py`** — Zotero client factory (`get_zotero_client()`) with instance caching, formatting utilities (BibTeX generation, markdown conversion, attachment handling). All tools in server.py call through this.
+- **`utils.py`** — Shared helpers: `format_creators()`, `format_item_list()`, `parse_limit()`, `is_local_mode()`, `clean_html()`. Used across server.py, client.py, semantic_search.py, and local_db.py.
 - **`semantic_search.py`** — `ZoteroSemanticSearch` class managing ChromaDB vector search with auto-update scheduling.
-- **`chroma_client.py`** — ChromaDB client with pluggable embedding functions (sentence-transformers default, OpenAI, Gemini, HuggingFace).
+- **`chroma_client.py`** — ChromaDB client with pluggable embedding functions (sentence-transformers default, OpenAI, Gemini, HuggingFace). Guarded by `_CHROMADB_AVAILABLE` flag for graceful degradation.
 - **`local_db.py`** — Direct SQLite reader for Zotero's local `zotero.sqlite` database. Returns `ZoteroItem` dataclass instances.
 - **`cli.py`** — argparse-based CLI, environment variable loading, config file detection.
 - **`setup_helper.py`** — Interactive wizard for configuring Claude Desktop integration and semantic search.
@@ -59,7 +66,7 @@ pre-commit run --all-files
 ## Key Patterns
 
 - **FastMCP lifespan:** `server_lifespan` in server.py handles startup/shutdown (e.g., semantic search auto-update).
-- **Dual mode:** Tools work in both local mode (direct SQLite + local API) and web mode (Zotero Web API with API key). Controlled by `ZOTERO_LOCAL` env var.
+- **Dual mode:** Tools work in both local mode (direct SQLite + local API) and web mode (Zotero Web API with API key). Controlled by `ZOTERO_LOCAL` env var. Use `is_local_mode()` from utils.py — never inline the env var check.
 - **Two local data paths:**
   - **pyzotero local API** (`client.py`): HTTP requests to `localhost:23119`. Used by all MCP tools. Requires Zotero running. Supports both user (`library_id=0`) and group (`library_type="group"`, `library_id=<groupID>`) libraries.
   - **Direct SQLite** (`local_db.py`): Reads `~/Zotero/zotero.sqlite` directly. Used only for semantic search bulk indexing. Does not require Zotero running.
@@ -67,6 +74,24 @@ pre-commit run --all-files
 - **Config hierarchy:** CLI args > standalone config (`~/.config/zotero-mcp/config.json`) > Claude Desktop config > env vars > defaults.
 - **Python 3.10+:** Uses `X | Y` union syntax throughout. Target version enforced by black and pyupgrade.
 - **Version:** Defined in `src/zotero_mcp/_version.py`.
+- **Optional dependency guards:** Heavy packages (chromadb, markitdown, openai, google-genai, sentence-transformers) are optional extras. Imports are guarded with `try/except ImportError` and provide user-friendly install instructions. When adding new heavy dependencies, follow this pattern — never add them to core `dependencies` in pyproject.toml.
+- **Client caching:** `get_zotero_client()` caches instances keyed by `(library_id, library_type, api_key, local)`. Cache is invalidated by `set_active_library()` / `clear_active_library()`.
+- **Shared formatting:** Use `format_item_list()` from utils.py when rendering lists of Zotero items as markdown. Use `parse_limit()` to coerce MCP tool limit parameters. Use `clean_html()` for HTML tag stripping.
+
+## Dependencies
+
+Core install requires only 6 packages: `pyzotero`, `mcp`, `python-dotenv`, `pydantic`, `requests`, `fastmcp`.
+
+Optional extras (in `pyproject.toml`):
+
+| Extra | Packages | Purpose |
+|-------|----------|---------|
+| `pdf` | markitdown[pdf] | PDF/file-to-markdown conversion |
+| `semantic` | chromadb, sentence-transformers | Vector semantic search |
+| `openai` | openai | OpenAI embeddings |
+| `gemini` | google-genai | Gemini embeddings |
+| `all` | All of the above | Full feature set |
+| `dev` | all + pytest, black, isort | Development |
 
 ## Environment Variables
 

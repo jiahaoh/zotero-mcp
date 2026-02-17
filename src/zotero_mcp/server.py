@@ -27,7 +27,13 @@ from zotero_mcp.client import (
     get_zotero_client,
     set_active_library,
 )
-from zotero_mcp.utils import clean_html, format_creators
+from zotero_mcp.utils import (
+    clean_html,
+    format_creators,
+    format_item_list,
+    is_local_mode,
+    parse_limit,
+)
 
 
 @asynccontextmanager
@@ -112,8 +118,7 @@ def search_items(
         ctx.info(f"Searching Zotero for '{query}'{tag_condition_str}")
         zot = get_zotero_client()
 
-        if isinstance(limit, str):
-            limit = int(limit)
+        limit = parse_limit(limit)
 
         # Search using the query parameters
         zot.add_parameters(
@@ -126,40 +131,7 @@ def search_items(
 
         # Format results as markdown
         output = [f"# Search Results for '{query}'", f"{tag_condition_str}", ""]
-
-        for i, item in enumerate(results, 1):
-            data = item.get("data", {})
-            title = data.get("title", "Untitled")
-            item_type = data.get("itemType", "unknown")
-            date = data.get("date", "No date")
-            key = item.get("key", "")
-
-            # Format creators
-            creators = data.get("creators", [])
-            creators_str = format_creators(creators)
-
-            # Build the formatted entry
-            output.append(f"## {i}. {title}")
-            output.append(f"**Type:** {item_type}")
-            output.append(f"**Item Key:** {key}")
-            output.append(f"**Date:** {date}")
-            output.append(f"**Authors:** {creators_str}")
-
-            # Add abstract snippet if present
-            if abstract := data.get("abstractNote"):
-                # Limit abstract length for search results
-                abstract_snippet = (
-                    abstract[:200] + "..." if len(abstract) > 200 else abstract
-                )
-                output.append(f"**Abstract:** {abstract_snippet}")
-
-            # Add tags if present
-            if tags := data.get("tags"):
-                tag_list = [f"`{tag['tag']}`" for tag in tags]
-                if tag_list:
-                    output.append(f"**Tags:** {' '.join(tag_list)}")
-
-            output.append("")  # Empty line between items
+        output.extend(format_item_list(results))
 
         return "\n".join(output)
 
@@ -208,8 +180,7 @@ def search_by_tag(
         ctx.info(f"Searching Zotero for tag '{tag}'")
         zot = get_zotero_client()
 
-        if isinstance(limit, str):
-            limit = int(limit)
+        limit = parse_limit(limit)
 
         # Search using the query parameters
         zot.add_parameters(q="", tag=tag, itemType=item_type, limit=limit)
@@ -220,40 +191,7 @@ def search_by_tag(
 
         # Format results as markdown
         output = [f"# Search Results for Tag: '{tag}'", ""]
-
-        for i, item in enumerate(results, 1):
-            data = item.get("data", {})
-            title = data.get("title", "Untitled")
-            item_type = data.get("itemType", "unknown")
-            date = data.get("date", "No date")
-            key = item.get("key", "")
-
-            # Format creators
-            creators = data.get("creators", [])
-            creators_str = format_creators(creators)
-
-            # Build the formatted entry
-            output.append(f"## {i}. {title}")
-            output.append(f"**Type:** {item_type}")
-            output.append(f"**Item Key:** {key}")
-            output.append(f"**Date:** {date}")
-            output.append(f"**Authors:** {creators_str}")
-
-            # Add abstract snippet if present
-            if abstract := data.get("abstractNote"):
-                # Limit abstract length for search results
-                abstract_snippet = (
-                    abstract[:200] + "..." if len(abstract) > 200 else abstract
-                )
-                output.append(f"**Abstract:** {abstract_snippet}")
-
-            # Add tags if present
-            if tags := data.get("tags"):
-                tag_list = [f"`{tag['tag']}`" for tag in tags]
-                if tag_list:
-                    output.append(f"**Tags:** {' '.join(tag_list)}")
-
-            output.append("")  # Empty line between items
+        output.extend(format_item_list(results))
 
         return "\n".join(output)
 
@@ -402,8 +340,7 @@ def get_collections(limit: int | str | None = None, *, ctx: Context) -> str:
         ctx.info("Fetching collections")
         zot = get_zotero_client()
 
-        if isinstance(limit, str):
-            limit = int(limit)
+        limit = parse_limit(limit)
 
         collections = zot.collections(limit=limit)
 
@@ -505,8 +442,7 @@ def get_collection_items(
         except Exception:
             collection_name = f"Collection {collection_key}"
 
-        if isinstance(limit, str):
-            limit = int(limit)
+        limit = parse_limit(limit)
 
         # Then get the items
         items = zot.collection_items(collection_key, limit=limit)
@@ -515,26 +451,9 @@ def get_collection_items(
 
         # Format items as markdown
         output = [f"# Items in Collection: {collection_name}", ""]
-
-        for i, item in enumerate(items, 1):
-            data = item.get("data", {})
-            title = data.get("title", "Untitled")
-            item_type = data.get("itemType", "unknown")
-            date = data.get("date", "No date")
-            key = item.get("key", "")
-
-            # Format creators
-            creators = data.get("creators", [])
-            creators_str = format_creators(creators)
-
-            # Build the formatted entry
-            output.append(f"## {i}. {title}")
-            output.append(f"**Type:** {item_type}")
-            output.append(f"**Item Key:** {key}")
-            output.append(f"**Date:** {date}")
-            output.append(f"**Authors:** {creators_str}")
-
-            output.append("")  # Empty line between items
+        output.extend(
+            format_item_list(items, include_abstract=False, include_tags=False)
+        )
 
         return "\n".join(output)
 
@@ -1021,8 +940,7 @@ def get_tags(limit: int | str | None = None, *, ctx: Context) -> str:
         ctx.info("Fetching tags")
         zot = get_zotero_client()
 
-        if isinstance(limit, str):
-            limit = int(limit)
+        limit = parse_limit(limit)
 
         tags = zot.tags(limit=limit)
         if not tags:
@@ -1068,7 +986,7 @@ def list_libraries(*, ctx: Context) -> str:
     """
     try:
         ctx.info("Listing accessible libraries")
-        local = os.getenv("ZOTERO_LOCAL", "").lower() in ["true", "yes", "1"]
+        local = is_local_mode()
         override = get_active_library()
 
         output = ["# Zotero Libraries", ""]
@@ -1234,7 +1152,7 @@ def validate_library_switch(library_id: str, library_type: str) -> str | None:
         return f"Invalid library_type '{library_type}'. Must be 'user', 'group', or 'feed'."
 
     # In local mode, verify the library actually exists in the database
-    local = os.getenv("ZOTERO_LOCAL", "").lower() in ["true", "yes", "1"]
+    local = is_local_mode()
     if local:
         try:
             from zotero_mcp.local_db import LocalZoteroReader
@@ -1280,7 +1198,7 @@ def list_feeds(*, ctx: Context) -> str:
         Markdown-formatted list of RSS feeds.
     """
     try:
-        local = os.getenv("ZOTERO_LOCAL", "").lower() in ["true", "yes", "1"]
+        local = is_local_mode()
         if not local:
             return "RSS feeds are only accessible in local mode (ZOTERO_LOCAL=true)."
 
@@ -1342,7 +1260,7 @@ def get_feed_items(
         Markdown-formatted list of feed items.
     """
     try:
-        local = os.getenv("ZOTERO_LOCAL", "").lower() in ["true", "yes", "1"]
+        local = is_local_mode()
         if not local:
             return (
                 "RSS feed items are only accessible in local mode (ZOTERO_LOCAL=true)."
@@ -1404,6 +1322,7 @@ def get_feed_items(
 # ---------------------------------------------------------------------------
 
 _DOI_RE = re.compile(r"10\.\d{4,9}/[^\s]+")
+_TAG_NORM_RE = re.compile(r"[\s\-_]+")
 
 
 def _extract_doi_from_url(url: str) -> str | None:
@@ -1765,7 +1684,7 @@ def add_to_library(
 
     # --- 2. Feed mode: locate feed item ---
     if title and feed_library_id is not None:
-        local = os.getenv("ZOTERO_LOCAL", "").lower() in ["true", "yes", "1"]
+        local = is_local_mode()
         if not local:
             return "Error: Feed mode requires ZOTERO_LOCAL=true."
 
@@ -1802,7 +1721,7 @@ def add_to_library(
         warnings.append("Semantic Scholar lookup failed; using available metadata.")
 
     # --- 5. Build Zotero item template ---
-    local = os.getenv("ZOTERO_LOCAL", "").lower() in ["true", "yes", "1"]
+    local = is_local_mode()
     write_zot = _get_write_client() if local else None
     zot = write_zot or get_zotero_client()
 
@@ -1940,8 +1859,7 @@ def get_recent(limit: int | str = 10, *, ctx: Context) -> str:
         ctx.info(f"Fetching {limit} recent items")
         zot = get_zotero_client()
 
-        if isinstance(limit, str):
-            limit = int(limit)
+        limit = parse_limit(limit)
 
         # Ensure limit is a reasonable number
         if limit <= 0:
@@ -1956,28 +1874,14 @@ def get_recent(limit: int | str = 10, *, ctx: Context) -> str:
 
         # Format items as markdown
         output = [f"# {limit} Most Recently Added Items", ""]
-
-        for i, item in enumerate(items, 1):
-            data = item.get("data", {})
-            title = data.get("title", "Untitled")
-            item_type = data.get("itemType", "unknown")
-            date = data.get("date", "No date")
-            key = item.get("key", "")
-            date_added = data.get("dateAdded", "Unknown")
-
-            # Format creators
-            creators = data.get("creators", [])
-            creators_str = format_creators(creators)
-
-            # Build the formatted entry
-            output.append(f"## {i}. {title}")
-            output.append(f"**Type:** {item_type}")
-            output.append(f"**Item Key:** {key}")
-            output.append(f"**Date:** {date}")
-            output.append(f"**Added:** {date_added}")
-            output.append(f"**Authors:** {creators_str}")
-
-            output.append("")  # Empty line between items
+        output.extend(
+            format_item_list(
+                items,
+                include_abstract=False,
+                include_tags=False,
+                include_date_added=True,
+            )
+        )
 
         return "\n".join(output)
 
@@ -2047,8 +1951,7 @@ def batch_update_tags(
         ctx.info(f"Batch updating tags for items matching '{query}'")
         zot = get_zotero_client()
 
-        if isinstance(limit, str):
-            limit = int(limit)
+        limit = parse_limit(limit)
 
         # Search for items matching the query
         zot.add_parameters(q=query, limit=limit)
@@ -2423,7 +2326,7 @@ def find_similar_tags(
 
     # Normalise: lowercase, collapse whitespace/hyphens/underscores
     def _norm(t: str) -> str:
-        return re.sub(r"[\s\-_]+", " ", t.strip().lower())
+        return _TAG_NORM_RE.sub(" ", t.strip().lower())
 
     normed = {t: _norm(t) for t in tags}
 
@@ -2594,8 +2497,7 @@ def advanced_search(
             params["sort"] = sort_by
             params["direction"] = sort_direction
 
-        if isinstance(limit, str):
-            limit = int(limit)
+        limit = parse_limit(limit)
 
         # Add limit parameter
         params["limit"] = limit
@@ -2673,40 +2575,9 @@ def advanced_search(
 
         # Format results
         output.append("## Results")
-
-        for i, item in enumerate(results, 1):
-            data = item.get("data", {})
-            title = data.get("title", "Untitled")
-            item_type = data.get("itemType", "unknown")
-            date = data.get("date", "No date")
-            key = item.get("key", "")
-
-            # Format creators
-            creators = data.get("creators", [])
-            creators_str = format_creators(creators)
-
-            # Build the formatted entry
-            output.append(f"### {i}. {title}")
-            output.append(f"**Type:** {item_type}")
-            output.append(f"**Item Key:** {key}")
-            output.append(f"**Date:** {date}")
-            output.append(f"**Authors:** {creators_str}")
-
-            # Add abstract snippet if present
-            if abstract := data.get("abstractNote"):
-                # Limit abstract length for search results
-                abstract_snippet = (
-                    abstract[:150] + "..." if len(abstract) > 150 else abstract
-                )
-                output.append(f"**Abstract:** {abstract_snippet}")
-
-            # Add tags if present
-            if tags := data.get("tags"):
-                tag_list = [f"`{tag['tag']}`" for tag in tags]
-                if tag_list:
-                    output.append(f"**Tags:** {' '.join(tag_list)}")
-
-            output.append("")  # Empty line between items
+        output.extend(
+            format_item_list(results, heading_level=3, abstract_max_length=150)
+        )
 
         return "\n".join(output)
 
@@ -2762,7 +2633,7 @@ def get_annotations(
             pdf_annotations = []
 
             # Try Better BibTeX method (local Zotero only)
-            if os.environ.get("ZOTERO_LOCAL", "").lower() in ["true", "yes", "1"]:
+            if is_local_mode():
                 try:
                     # Import Better BibTeX dependencies
                     from zotero_mcp.better_bibtex_client import (
@@ -3010,8 +2881,7 @@ def get_annotations(
 
         else:
             # Retrieve all annotations in the library
-            if isinstance(limit, str):
-                limit = int(limit)
+            limit = parse_limit(limit)
             zot.add_parameters(itemType="annotation", limit=limit or 50)
             annotations = zot.everything(zot.items())
 
@@ -3130,8 +3000,7 @@ def get_notes(
         # Prepare search parameters
         params = {"itemType": "note"}
 
-        if isinstance(limit, str):
-            limit = int(limit)
+        limit = parse_limit(limit)
 
         # Get notes
         notes = []
@@ -3221,8 +3090,7 @@ def search_notes(query: str, limit: int | str | None = 20, *, ctx: Context) -> s
 
         # Search for notes and annotations
 
-        if isinstance(limit, str):
-            limit = int(limit)
+        limit = parse_limit(limit)
 
         # First search notes
         zot.add_parameters(q=query, itemType="note", limit=limit or 20)

@@ -15,6 +15,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .utils import is_local_mode
 
+# Singleton MarkItDown instance for HTML text extraction.
+_markitdown_instance = None
+
 
 @dataclass
 class ZoteroItem:
@@ -201,12 +204,14 @@ class LocalZoteroReader:
 
     def _extract_text_from_html(self, file_path: Path) -> str:
         """Extract text from HTML using markitdown if available; fallback to stripping tags."""
+        global _markitdown_instance
         # Try markitdown first
         try:
             from markitdown import MarkItDown
 
-            md = MarkItDown()
-            result = md.convert(str(file_path))
+            if _markitdown_instance is None:
+                _markitdown_instance = MarkItDown()
+            result = _markitdown_instance.convert(str(file_path))
             return result.text_content or ""
         except Exception:
             pass

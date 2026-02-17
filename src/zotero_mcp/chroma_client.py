@@ -13,9 +13,22 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 import logging
 
-import chromadb
-from chromadb import Documents, EmbeddingFunction, Embeddings
-from chromadb.config import Settings
+try:
+    import chromadb
+    from chromadb import Documents, EmbeddingFunction, Embeddings
+    from chromadb.config import Settings
+
+    _CHROMADB_AVAILABLE = True
+except ImportError:
+    _CHROMADB_AVAILABLE = False
+    # Provide stub types so class definitions don't fail at import time
+    Documents = list  # type: ignore[misc,assignment]
+    Embeddings = list  # type: ignore[misc,assignment]
+
+    class EmbeddingFunction:  # type: ignore[no-redef]
+        """Stub base class when chromadb is not installed."""
+
+        pass
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +159,12 @@ class ChromaClient:
             embedding_model: Model to use for embeddings ('default', 'openai', 'gemini', 'qwen', 'embeddinggemma', or HuggingFace model name)
             embedding_config: Configuration for the embedding model
         """
+        if not _CHROMADB_AVAILABLE:
+            raise ImportError(
+                "chromadb is not installed. Semantic search requires the 'semantic' extra. "
+                "Install it with: pip install zotero-mcp[semantic]"
+            )
+
         self.collection_name = collection_name
         self.embedding_model = embedding_model
         self.embedding_config = embedding_config or {}

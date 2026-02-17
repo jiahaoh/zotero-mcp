@@ -19,7 +19,7 @@ from pyzotero import zotero
 
 from .chroma_client import ChromaClient, create_chroma_client
 from .client import get_zotero_client
-from .utils import format_creators, is_local_mode
+from .utils import clean_html, format_creators, is_local_mode
 from .local_db import LocalZoteroReader, get_local_zotero_reader
 
 logger = logging.getLogger(__name__)
@@ -142,9 +142,7 @@ class ZoteroSemanticSearch:
 
         # Note content (if available)
         if note := data.get("note"):
-            # Clean HTML from notes
-            import re
-            note_text = re.sub(r'<[^>]+>', '', note)
+            note_text = clean_html(note)
             extra_fields.append(note_text)
 
         # Combine all text fields
