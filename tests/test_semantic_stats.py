@@ -8,7 +8,10 @@ if sys.version_info >= (3, 14):
         allow_module_level=True,
     )
 
-from zotero_mcp import semantic_search
+try:
+    from zotero_mcp import semantic_search
+except ImportError:
+    pytest.skip("chromadb not installed", allow_module_level=True)
 
 
 class FakeChromaClient:
