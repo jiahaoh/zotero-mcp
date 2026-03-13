@@ -6,14 +6,14 @@ method and preserves all user configurations.
 """
 
 import json
+import logging
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
-import logging
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
     import requests
@@ -81,10 +81,7 @@ def is_pipx_installation() -> bool:
 
         # Try to get pipx list
         result = subprocess.run(
-            ["pipx", "list"],
-            capture_output=True,
-            text=True,
-            timeout=10
+            ["pipx", "list"], capture_output=True, text=True, timeout=10
         )
 
         if result.returncode == 0:
@@ -100,6 +97,7 @@ def get_current_version() -> str | None:
     """Get the currently installed version of zotero-mcp."""
     try:
         from zotero_mcp._version import __version__
+
         return __version__
     except ImportError:
         # Fallback to pip show
@@ -108,7 +106,7 @@ def get_current_version() -> str | None:
                 [sys.executable, "-m", "pip", "show", "zotero-mcp"],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
             )
 
             if result.returncode == 0:
@@ -129,8 +127,7 @@ def get_latest_version() -> str | None:
 
     try:
         response = requests.get(
-            "https://api.github.com/repos/54yyyu/zotero-mcp/releases/latest",
-            timeout=10
+            "https://api.github.com/repos/54yyyu/zotero-mcp/releases/latest", timeout=10
         )
 
         if response.status_code == 200:
@@ -156,10 +153,20 @@ def backup_configurations() -> Path:
 
     # Backup Claude Desktop configs
     claude_config_paths = [
-        Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json",
-        Path.home() / "Library" / "Application Support" / "Claude Desktop" / "claude_desktop_config.json",
+        Path.home()
+        / "Library"
+        / "Application Support"
+        / "Claude"
+        / "claude_desktop_config.json",
+        Path.home()
+        / "Library"
+        / "Application Support"
+        / "Claude Desktop"
+        / "claude_desktop_config.json",
         Path(os.environ.get("APPDATA", "")) / "Claude" / "claude_desktop_config.json",
-        Path(os.environ.get("APPDATA", "")) / "Claude Desktop" / "claude_desktop_config.json",
+        Path(os.environ.get("APPDATA", ""))
+        / "Claude Desktop"
+        / "claude_desktop_config.json",
         Path.home() / ".config" / "Claude" / "claude_desktop_config.json",
         Path.home() / ".config" / "Claude Desktop" / "claude_desktop_config.json",
     ]
@@ -172,7 +179,9 @@ def backup_configurations() -> Path:
                 print(f"Backed up Claude Desktop config from: {config_path}")
                 break
             except Exception as e:
-                logger.warning(f"Could not backup Claude config from {config_path}: {e}")
+                logger.warning(
+                    f"Could not backup Claude config from {config_path}: {e}"
+                )
 
     # Backup semantic search config
     semantic_config_path = Path.home() / ".config" / "zotero-mcp" / "config.json"
@@ -228,7 +237,9 @@ def restore_configurations(backup_dir: Path) -> bool:
     semantic_backup = backup_dir / "semantic_config.json"
     if semantic_backup.exists():
         try:
-            semantic_config_path = Path.home() / ".config" / "zotero-mcp" / "config.json"
+            semantic_config_path = (
+                Path.home() / ".config" / "zotero-mcp" / "config.json"
+            )
             semantic_config_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(semantic_backup, semantic_config_path)
             print(f"Restored semantic search config")
@@ -281,7 +292,7 @@ def update_via_method(method: str, force: bool = False) -> tuple[bool, str]:
                     ["pipx", "upgrade", "zotero-mcp"],
                     capture_output=True,
                     text=True,
-                    timeout=300
+                    timeout=300,
                 )
                 if result.returncode == 0:
                     return True, "Updated successfully via pipx"
@@ -297,12 +308,7 @@ def update_via_method(method: str, force: bool = False) -> tuple[bool, str]:
             cmd.append("--force-reinstall")
 
         print(f"Running: {' '.join(cmd)}")
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
 
         if result.returncode == 0:
             return True, f"Successfully updated via {method}"
@@ -334,7 +340,7 @@ def verify_installation() -> tuple[bool, str]:
             [sys.executable, "-m", "zotero_mcp.cli", "version"],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
         )
 
         if result.returncode == 0:
@@ -346,9 +352,9 @@ def verify_installation() -> tuple[bool, str]:
         return False, f"Installation verification error: {str(e)}"
 
 
-def update_zotero_mcp(check_only: bool = False,
-                     force: bool = False,
-                     method: str | None = None) -> dict[str, Any]:
+def update_zotero_mcp(
+    check_only: bool = False, force: bool = False, method: str | None = None
+) -> dict[str, Any]:
     """
     Main update function for zotero-mcp.
 
@@ -366,7 +372,7 @@ def update_zotero_mcp(check_only: bool = False,
         "latest_version": None,
         "method": None,
         "message": "",
-        "needs_update": False
+        "needs_update": False,
     }
 
     # Get current version
@@ -396,7 +402,9 @@ def update_zotero_mcp(check_only: bool = False,
 
     if check_only:
         if needs_update:
-            result["message"] = f"Update available: {current_version} → {latest_version}"
+            result["message"] = (
+                f"Update available: {current_version} → {latest_version}"
+            )
         else:
             result["message"] = f"Already up to date (version {current_version})"
         result["success"] = True
@@ -450,7 +458,9 @@ def update_zotero_mcp(check_only: bool = False,
         verify_success, verify_message = verify_installation()
 
         if not verify_success:
-            result["message"] = f"Update completed but verification failed: {verify_message}"
+            result["message"] = (
+                f"Update completed but verification failed: {verify_message}"
+            )
             return result
 
         print(verify_message)
@@ -462,7 +472,9 @@ def update_zotero_mcp(check_only: bool = False,
             pass  # Not critical if cleanup fails
 
         result["success"] = True
-        result["message"] = f"Successfully updated from {current_version} to {latest_version}"
+        result["message"] = (
+            f"Successfully updated from {current_version} to {latest_version}"
+        )
 
     except Exception as e:
         result["message"] = f"Update failed: {str(e)}"

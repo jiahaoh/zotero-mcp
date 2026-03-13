@@ -1,8 +1,9 @@
-from typing import List, Dict
 import os
 import re
+from typing import Dict, List
 
 html_re = re.compile(r"<.*?>")
+
 
 def format_creators(creators: list[dict[str, str]]) -> str:
     """
@@ -31,6 +32,7 @@ def is_local_mode() -> bool:
     """
     value = os.getenv("ZOTERO_LOCAL", "")
     return value.lower() in {"true", "yes", "1"}
+
 
 def parse_limit(limit: int | str | None) -> int | None:
     """Coerce a limit value that may arrive as a string into an int.

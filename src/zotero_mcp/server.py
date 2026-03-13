@@ -61,4 +61,13 @@ mcp = FastMCP("Zotero", lifespan=server_lifespan)
 # Import tool modules — each registers its tools on the ``mcp`` instance.
 # These imports MUST come after ``mcp`` is defined to avoid circular imports.
 # ---------------------------------------------------------------------------
-from zotero_mcp.tools import search, retrieval, collections, tags, notes, library, semantic, connectors  # noqa: E402, F401
+from zotero_mcp.tools import (  # noqa: E402, F401
+    collections,
+    connectors,
+    library,
+    notes,
+    retrieval,
+    search,
+    semantic,
+    tags,
+)

@@ -3,33 +3,34 @@ Utility for downloading and installing the pdfannots2json tool.
 """
 
 import os
-import sys
 import platform
 import shutil
-import tempfile
+import sys
 import tarfile
-import zipfile
+import tempfile
 import urllib.request
+import zipfile
 from pathlib import Path
 
 # Constants
 CURRENT_VERSION = "1.0.15"
-BASE_URL = f"https://github.com/mgmeyers/pdfannots2json/releases/download/{CURRENT_VERSION}/"
+BASE_URL = (
+    f"https://github.com/mgmeyers/pdfannots2json/releases/download/{CURRENT_VERSION}/"
+)
 
 # Download URLs based on platform and architecture
 DOWNLOAD_URLS = {
     "darwin": {
         "x86_64": f"{BASE_URL}pdfannots2json.Mac.Intel.tar.gz",
-        "arm64": f"{BASE_URL}pdfannots2json.Mac.M1.tar.gz"
+        "arm64": f"{BASE_URL}pdfannots2json.Mac.M1.tar.gz",
     },
-    "linux": {
-        "x86_64": f"{BASE_URL}pdfannots2json.Linux.x64.tar.gz"
-    },
+    "linux": {"x86_64": f"{BASE_URL}pdfannots2json.Linux.x64.tar.gz"},
     "win32": {
         "x86_64": f"{BASE_URL}pdfannots2json.Windows.x64.zip",
-        "AMD64": f"{BASE_URL}pdfannots2json.Windows.x64.zip"  # Windows reports AMD64 instead of x86_64
-    }
+        "AMD64": f"{BASE_URL}pdfannots2json.Windows.x64.zip",  # Windows reports AMD64 instead of x86_64
+    },
 }
+
 
 def get_executable_name():
     """Get the name of the executable based on the platform"""
@@ -38,13 +39,16 @@ def get_executable_name():
     else:
         return f"pdfannots2json-{platform.system().lower()}-{platform.machine()}"
 
+
 def get_install_dir():
     """Get the directory to install the executable"""
     return os.path.expanduser("~/.pdfannots2json")
 
+
 def get_executable_path():
     """Get the full path to the executable"""
     return os.path.join(get_install_dir(), get_executable_name())
+
 
 def get_download_url():
     """Get the download URL for the current platform and architecture"""
@@ -66,15 +70,18 @@ def get_download_url():
 
     return None
 
+
 def make_executable(path):
     """Make a file executable"""
     if platform.system().lower() != "windows":
         current_mode = os.stat(path).st_mode
         os.chmod(path, current_mode | 0o111)  # Add executable bit
 
+
 def exists():
     """Check if the executable exists"""
     return os.path.exists(get_executable_path())
+
 
 def download_and_install():
     """Download and extract the executable

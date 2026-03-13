@@ -182,7 +182,9 @@ def _get_write_client():
             pass
     if not library_id or library_id == "0":
         return None
-    return zotero.Zotero(library_id=library_id, library_type=library_type, api_key=api_key)
+    return zotero.Zotero(
+        library_id=library_id, library_type=library_type, api_key=api_key
+    )
 
 
 def _resolve_connector_collection_id(collection_key: str) -> str | None:

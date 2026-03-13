@@ -2,7 +2,6 @@
 
 import json
 import re
-
 from collections import defaultdict
 from difflib import SequenceMatcher
 
@@ -407,6 +406,7 @@ def find_similar_tags(
     Returns a list of (tag_a, tag_b, similarity_score) tuples, sorted by
     score descending.  At most 50 pairs are returned to keep output readable.
     """
+
     # Normalise: lowercase, collapse whitespace/hyphens/underscores
     def _norm(t: str) -> str:
         return _TAG_NORM_RE.sub(" ", t.strip().lower())

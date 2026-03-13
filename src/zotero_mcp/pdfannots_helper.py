@@ -2,36 +2,38 @@
 Helper functions for PDF annotation extraction using pdfannots2json.
 """
 
-import os
 import json
+import os
 import platform
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional, Union, Any
+from typing import Any, Dict, List, Optional, Union
 
 # Constants
 PDFANNOTS_VERSION = "1.0.15"
-PDFANNOTS_BASE_URL = f"https://github.com/mgmeyers/pdfannots2json/releases/download/{PDFANNOTS_VERSION}/"
+PDFANNOTS_BASE_URL = (
+    f"https://github.com/mgmeyers/pdfannots2json/releases/download/{PDFANNOTS_VERSION}/"
+)
 
 # Download URLs based on platform and architecture
 PDFANNOTS_URLS = {
     "darwin": {
         "x86_64": f"{PDFANNOTS_BASE_URL}pdfannots2json.Mac.Intel.tar.gz",
-        "arm64": f"{PDFANNOTS_BASE_URL}pdfannots2json.Mac.M1.tar.gz"
+        "arm64": f"{PDFANNOTS_BASE_URL}pdfannots2json.Mac.M1.tar.gz",
     },
-    "linux": {
-        "x86_64": f"{PDFANNOTS_BASE_URL}pdfannots2json.Linux.x64.tar.gz"
-    },
+    "linux": {"x86_64": f"{PDFANNOTS_BASE_URL}pdfannots2json.Linux.x64.tar.gz"},
     "win32": {
         "x86_64": f"{PDFANNOTS_BASE_URL}pdfannots2json.Windows.x64.zip",
-        "AMD64": f"{PDFANNOTS_BASE_URL}pdfannots2json.Windows.x64.zip"
-    }
+        "AMD64": f"{PDFANNOTS_BASE_URL}pdfannots2json.Windows.x64.zip",
+    },
 }
+
 
 def get_pdfannots_dir() -> str:
     """Get the directory where pdfannots2json is installed"""
     return os.path.expanduser("~/.pdfannots2json")
+
 
 def get_pdfannots_executable() -> str:
     """Get the path to the pdfannots2json executable"""
@@ -44,9 +46,11 @@ def get_pdfannots_executable() -> str:
     else:
         return os.path.join(base_dir, f"pdfannots2json-{system}-{machine}")
 
+
 def is_pdfannots_installed() -> bool:
     """Check if pdfannots2json is installed"""
     return os.path.exists(get_pdfannots_executable())
+
 
 def ensure_pdfannots_installed() -> bool:
     """Ensure pdfannots2json is installed, downloading if necessary"""
@@ -56,18 +60,20 @@ def ensure_pdfannots_installed() -> bool:
     # If not installed, use the downloader script to install it
     try:
         from zotero_mcp import pdfannots_downloader
+
         success = pdfannots_downloader.download_and_install()
         return success
     except Exception as e:
         print(f"Error installing pdfannots2json: {e}")
         return False
 
+
 def extract_annotations_from_pdf(
     pdf_path: str | Path,
     output_dir: str | None = None,
     image_format: str = "jpg",
     image_dpi: int = 120,
-    image_quality: int = 90
+    image_quality: int = 90,
 ) -> list[dict[str, Any]]:
     """
     Extract annotations directly from a PDF file using pdfannots2json
@@ -99,11 +105,16 @@ def extract_annotations_from_pdf(
     cmd = [
         exe_path,
         str(pdf_path),
-        "-o", output_dir,
-        "-n", "annotation",
-        "-f", image_format,
-        "-d", str(image_dpi),
-        "-q", str(image_quality)
+        "-o",
+        output_dir,
+        "-n",
+        "annotation",
+        "-f",
+        image_format,
+        "-d",
+        str(image_dpi),
+        "-q",
+        str(image_quality),
     ]
 
     try:

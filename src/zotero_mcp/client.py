@@ -74,7 +74,9 @@ def get_zotero_client() -> zotero.Zotero:
     # Runtime overrides take precedence over environment variables
     override = _active_library_override
     library_id = override.get("library_id") or os.getenv("ZOTERO_LIBRARY_ID")
-    library_type = override.get("library_type") or os.getenv("ZOTERO_LIBRARY_TYPE", "user")
+    library_type = override.get("library_type") or os.getenv(
+        "ZOTERO_LIBRARY_TYPE", "user"
+    )
     api_key = os.getenv("ZOTERO_API_KEY")
     local = is_local_mode()
 
@@ -163,10 +165,12 @@ def format_item_metadata(item: dict[str, Any], include_abstract: bool = True) ->
         # Try to surface a citation key if present in Extra
         for line in extra.splitlines():
             if "citation key" in line.lower():
-                key_part = line.split(":", 1)[1].strip() if ":" in line else line.strip()
+                key_part = (
+                    line.split(":", 1)[1].strip() if ":" in line else line.strip()
+                )
                 lines.append(f"**Citation Key (from Extra):** {key_part}")
                 break
-    
+
     # Tags
     if tags := data.get("tags"):
         tag_list = [f"`{tag['tag']}`" for tag in tags]
@@ -205,6 +209,7 @@ def generate_bibtex(item: dict[str, Any]) -> str:
     # Try Better BibTeX first
     try:
         from zotero_mcp.better_bibtex_client import ZoteroBetterBibTexAPI
+
         bibtex = ZoteroBetterBibTexAPI()
 
         if bibtex.is_zotero_running():
@@ -229,7 +234,7 @@ def generate_bibtex(item: dict[str, Any]) -> str:
         "thesis": "phdthesis",
         "report": "techreport",
         "webpage": "misc",
-        "manuscript": "unpublished"
+        "manuscript": "unpublished",
     }
 
     # Create citation key
@@ -237,7 +242,9 @@ def generate_bibtex(item: dict[str, Any]) -> str:
     author = ""
     if creators:
         first = creators[0]
-        author = first.get("lastName", first.get("name", "").split()[-1] if first.get("name") else "").replace(" ", "")
+        author = first.get(
+            "lastName", first.get("name", "").split()[-1] if first.get("name") else ""
+        ).replace(" ", "")
 
     year = data.get("date", "")[:4] if data.get("date") else "nodate"
     cite_key = f"{author}{year}_{item_key}"
@@ -256,14 +263,14 @@ def generate_bibtex(item: dict[str, Any]) -> str:
         ("publisher", "publisher"),
         ("DOI", "doi"),
         ("url", "url"),
-        ("abstractNote", "abstract")
+        ("abstractNote", "abstract"),
     ]
 
     for zotero_field, bibtex_field in field_mappings:
         if value := data.get(zotero_field):
             # Escape special characters
             value = value.replace("{", "\\{").replace("}", "\\}")
-            lines.append(f'  {bibtex_field} = {{{value}}},')
+            lines.append(f"  {bibtex_field} = {{{value}}},")
 
     # Add authors
     if creators:
@@ -279,10 +286,10 @@ def generate_bibtex(item: dict[str, Any]) -> str:
 
     # Add year
     if year != "nodate":
-        lines.append(f'  year = {{{year}}},')
+        lines.append(f"  year = {{{year}}},")
 
     # Remove trailing comma from last field and close entry
-    if lines[-1].endswith(','):
+    if lines[-1].endswith(","):
         lines[-1] = lines[-1][:-1]
     lines.append("}")
 

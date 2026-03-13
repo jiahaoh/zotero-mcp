@@ -1,5 +1,7 @@
 """Item retrieval tools: get_item_metadata, get_item_fulltext, get_recent, get_item_children."""
 
+from typing import Literal
+
 from fastmcp import Context
 
 from zotero_mcp.client import (
@@ -11,8 +13,6 @@ from zotero_mcp.client import (
 )
 from zotero_mcp.server import mcp
 from zotero_mcp.utils import format_item_list, parse_limit
-
-from typing import Literal
 
 
 @mcp.tool(
