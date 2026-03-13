@@ -1,6 +1,6 @@
 """Tests for tag management tools: rename, delete, merge, statistics."""
 
-from zotero_mcp.server import (
+from zotero_mcp.tools.tags import (
     delete_tag as _delete_tag,
     find_similar_tags,
     get_tag_statistics as _get_tag_statistics,

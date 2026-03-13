@@ -5,14 +5,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 from conftest import unwrap
 
-from zotero_mcp.server import (
+from zotero_mcp.tools.library import (
     _download_pdf,
     _extract_doi_from_url,
     _fetch_s2_paper,
     _map_s2_to_zotero,
     _parse_feed_creators,
+    add_to_library as _add_to_library,
 )
-from zotero_mcp.server import add_to_library as _add_to_library
 
 add_to_library = unwrap(_add_to_library)
 
@@ -236,7 +236,7 @@ class TestAddToLibrary:
         result = add_to_library(ctx=mock_ctx)
         assert "Error" in result
 
-    @patch("zotero_mcp.server._fetch_s2_paper")
+    @patch("zotero_mcp.tools.library._fetch_s2_paper")
     def test_doi_mode_creates_item(self, mock_s2, mock_zot, mock_ctx):
         mock_s2.return_value = _s2_paper()
         mock_zot.item_template.return_value = _base_template()
@@ -248,7 +248,7 @@ class TestAddToLibrary:
         assert "A Great Paper" in result
         mock_zot.create_items.assert_called_once()
 
-    @patch("zotero_mcp.server._fetch_s2_paper")
+    @patch("zotero_mcp.tools.library._fetch_s2_paper")
     def test_url_mode_extracts_doi(self, mock_s2, mock_zot, mock_ctx):
         mock_s2.return_value = _s2_paper()
         mock_zot.item_template.return_value = _base_template()
@@ -261,7 +261,7 @@ class TestAddToLibrary:
         assert "NEWKEY2" in result
         mock_s2.assert_called_once_with("10.1234/test", None)
 
-    @patch("zotero_mcp.server._fetch_s2_paper")
+    @patch("zotero_mcp.tools.library._fetch_s2_paper")
     def test_collection_key_passed_to_template(self, mock_s2, mock_zot, mock_ctx):
         mock_s2.return_value = _s2_paper()
         mock_zot.item_template.return_value = _base_template()
@@ -278,7 +278,7 @@ class TestAddToLibrary:
         assert created["collections"] == ["COL123"]
         assert "COL123" in result
 
-    @patch("zotero_mcp.server._fetch_s2_paper")
+    @patch("zotero_mcp.tools.library._fetch_s2_paper")
     def test_s2_failure_still_creates_item(self, mock_s2, mock_zot, mock_ctx):
         mock_s2.return_value = None
         mock_zot.item_template.return_value = _base_template()
@@ -289,8 +289,8 @@ class TestAddToLibrary:
         assert "NEWKEY4" in result
         assert "Semantic Scholar lookup failed" in result
 
-    @patch("zotero_mcp.server._download_pdf")
-    @patch("zotero_mcp.server._fetch_s2_paper")
+    @patch("zotero_mcp.tools.library._download_pdf")
+    @patch("zotero_mcp.tools.library._fetch_s2_paper")
     def test_pdf_download_and_attach(self, mock_s2, mock_dl, mock_zot, mock_ctx):
         mock_s2.return_value = _s2_paper()
         mock_dl.return_value = "/tmp/fake.pdf"
@@ -304,13 +304,13 @@ class TestAddToLibrary:
             ["/tmp/fake.pdf"], parentid="NEWKEY5"
         )
 
-    @patch("zotero_mcp.server._fetch_s2_paper")
+    @patch("zotero_mcp.tools.library._fetch_s2_paper")
     def test_feed_mode_requires_local(self, mock_s2, mock_zot, mock_ctx):
         with patch.dict("os.environ", {"ZOTERO_LOCAL": "false"}):
             result = add_to_library(title="Test", feed_library_id=2, ctx=mock_ctx)
         assert "ZOTERO_LOCAL" in result
 
-    @patch("zotero_mcp.server._fetch_s2_paper")
+    @patch("zotero_mcp.tools.library._fetch_s2_paper")
     @patch("zotero_mcp.local_db.LocalZoteroReader")
     def test_feed_mode_not_found(self, mock_reader_cls, mock_s2, mock_zot, mock_ctx):
         reader = MagicMock()
@@ -329,8 +329,8 @@ class TestAddToLibrary:
         assert "No feed item matching" in result
         assert "Recent Paper A" in result
 
-    @patch("zotero_mcp.server._create_item_via_connector")
-    @patch("zotero_mcp.server._fetch_s2_paper")
+    @patch("zotero_mcp.tools.library._create_item_via_connector")
+    @patch("zotero_mcp.tools.library._fetch_s2_paper")
     @patch("zotero_mcp.local_db.LocalZoteroReader")
     def test_feed_mode_success(
         self, mock_reader_cls, mock_s2, mock_connector, mock_zot, mock_ctx

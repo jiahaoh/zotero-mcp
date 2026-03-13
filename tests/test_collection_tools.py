@@ -1,14 +1,14 @@
 """Tests for collection management tools and suggest_organization."""
 
-from zotero_mcp.server import (
+from zotero_mcp.tools.collections import (
     add_items_to_collection as _add_items_to_collection,
     create_collection as _create_collection,
     delete_collection as _delete_collection,
     move_items_between_collections as _move_items_between_collections,
     remove_items_from_collection as _remove_items_from_collection,
     rename_collection as _rename_collection,
-    suggest_organization as _suggest_organization,
 )
+from zotero_mcp.tools.tags import suggest_organization as _suggest_organization
 
 from conftest import make_collection, make_item, unwrap
 

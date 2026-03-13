@@ -82,7 +82,20 @@ def mock_zot():
 
     Yields the mock client so tests can configure return values.
     """
-    with patch("zotero_mcp.server.get_zotero_client") as mock_get:
-        zot = MagicMock()
-        mock_get.return_value = zot
-        yield zot
+    zot = MagicMock()
+    # Patch get_zotero_client in every tool module that imports it.
+    targets = [
+        "zotero_mcp.tools.search.get_zotero_client",
+        "zotero_mcp.tools.retrieval.get_zotero_client",
+        "zotero_mcp.tools.collections.get_zotero_client",
+        "zotero_mcp.tools.tags.get_zotero_client",
+        "zotero_mcp.tools.notes.get_zotero_client",
+        "zotero_mcp.tools.library.get_zotero_client",
+        "zotero_mcp.tools.connectors.get_zotero_client",
+    ]
+    patches = [patch(t, return_value=zot) for t in targets]
+    for p in patches:
+        p.start()
+    yield zot
+    for p in patches:
+        p.stop()
