@@ -1,4 +1,7 @@
-from zotero_mcp import server
+from zotero_mcp.tools import notes as notes_mod
+from conftest import unwrap
+
+create_note = unwrap(notes_mod.create_note)
 
 
 class DummyContext:
@@ -26,9 +29,11 @@ class FakeZotero:
 
 def test_create_note_includes_title_heading(monkeypatch):
     fake_zot = FakeZotero()
-    monkeypatch.setattr(server, "get_zotero_client", lambda: fake_zot)
+    monkeypatch.setattr(notes_mod, "get_zotero_client", lambda: fake_zot)
+    # Ensure we take the non-local path
+    monkeypatch.setattr(notes_mod, "is_local_mode", lambda: False)
 
-    result = server.create_note(
+    result = create_note(
         item_key="ITEM0001",
         note_title="<Unsafe Title>",
         note_text="Line one\n\nLine two",

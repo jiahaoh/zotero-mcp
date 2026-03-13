@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "zotero-mcp": {
+      "command": "/Users/jiahao/Desktop/GitHub/jiahaoh/zotero-mcp/.venv/bin/zotero-mcp",
+      "args": ["serve", "--transport", "stdio"],
+      "env": {
+        "ZOTERO_LOCAL": "true",
+        "ZOTERO_LIBRARY_ID": "0"
+      }
+    }
+  }
+}

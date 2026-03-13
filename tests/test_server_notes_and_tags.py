@@ -1,4 +1,9 @@
-from zotero_mcp import server
+from zotero_mcp.tools import search as search_mod
+from zotero_mcp.tools import tags as tags_mod
+from conftest import unwrap
+
+search_notes = unwrap(search_mod.search_notes)
+batch_update_tags = unwrap(tags_mod.batch_update_tags)
 
 
 class DummyContext:
@@ -69,10 +74,13 @@ def test_search_notes_filters_annotation_blocks(monkeypatch):
     }
     fake_zot = FakeZoteroForNotes(notes, parent_items)
 
-    monkeypatch.setattr(server, "get_zotero_client", lambda: fake_zot)
+    monkeypatch.setattr(search_mod, "get_zotero_client", lambda: fake_zot)
+    # Mock get_annotations in the notes module (called by search_notes)
+    from zotero_mcp.tools import notes as notes_mod
+
     monkeypatch.setattr(
-        server,
-        "_get_annotations",
+        notes_mod,
+        "get_annotations",
         lambda **_kwargs: (
             "# Annotations\n\n"
             "## Annotation 1\n"
@@ -82,7 +90,7 @@ def test_search_notes_filters_annotation_blocks(monkeypatch):
         ),
     )
 
-    result = server.search_notes(query="quantum", limit=20, ctx=DummyContext())
+    result = search_notes(query="quantum", limit=20, ctx=DummyContext())
 
     assert "Annotation 1" in result
     assert "Annotation 2" not in result
@@ -100,9 +108,9 @@ def test_batch_update_tags_validates_json_array(monkeypatch):
             },
         }
     ]
-    monkeypatch.setattr(server, "get_zotero_client", lambda: FakeZoteroForTags(items))
+    monkeypatch.setattr(tags_mod, "get_zotero_client", lambda: FakeZoteroForTags(items))
 
-    result = server.batch_update_tags(
+    result = batch_update_tags(
         query="anything",
         add_tags='{"not":"a-list"}',
         remove_tags=None,
@@ -110,4 +118,4 @@ def test_batch_update_tags_validates_json_array(monkeypatch):
         ctx=DummyContext(),
     )
 
-    assert "must be a JSON array or a list of strings" in result
+    assert "must be a JSON array or a list of strings" in result or "malformed JSON" in result

@@ -31,14 +31,14 @@ if TYPE_CHECKING:
 
 # Anchor-based matching settings
 ANCHOR_MIN_TEXT_LENGTH = 100  # Use anchor matching for text longer than this
-ANCHOR_TARGET_LENGTH = 40     # Target length for start/end anchors
+ANCHOR_TARGET_LENGTH = 40  # Target length for start/end anchors
 ANCHOR_WORD_BOUNDARY_TOLERANCE = 15  # How far to extend to find word boundary
 ANCHOR_MATCH_THRESHOLD = 0.75  # Minimum similarity for anchor fuzzy matching
 
 # Fuzzy matching thresholds (by text length)
-FUZZY_THRESHOLD_SHORT = 0.85   # For text < 50 chars
+FUZZY_THRESHOLD_SHORT = 0.85  # For text < 50 chars
 FUZZY_THRESHOLD_MEDIUM = 0.75  # For text 50-150 chars
-FUZZY_THRESHOLD_LONG = 0.65    # For text > 150 chars
+FUZZY_THRESHOLD_LONG = 0.65  # For text > 150 chars
 
 # Search behavior
 DEFAULT_NEIGHBOR_PAGES = 2  # How many pages to search on either side
@@ -53,26 +53,26 @@ SLIDING_WINDOW_STEP_THRESHOLD = 10000  # Use stepping for texts longer than this
 
 # Character replacement maps for normalization
 DASH_REPLACEMENTS = {
-    '\u2014': '-',  # em-dash
-    '\u2013': '-',  # en-dash
-    '\u2012': '-',  # figure dash
-    '\u2011': '-',  # non-breaking hyphen
-    '\u2010': '-',  # hyphen
+    "\u2014": "-",  # em-dash
+    "\u2013": "-",  # en-dash
+    "\u2012": "-",  # figure dash
+    "\u2011": "-",  # non-breaking hyphen
+    "\u2010": "-",  # hyphen
 }
 
 QUOTE_REPLACEMENTS = {
-    '\u2018': "'",  # left single quote
-    '\u2019': "'",  # right single quote
-    '\u201c': '"',  # left double quote
-    '\u201d': '"',  # right double quote
+    "\u2018": "'",  # left single quote
+    "\u2019": "'",  # right single quote
+    "\u201c": '"',  # left double quote
+    "\u201d": '"',  # right double quote
 }
 
 LIGATURE_REPLACEMENTS = {
-    '\ufb01': 'fi',   # fi ligature
-    '\ufb02': 'fl',   # fl ligature
-    '\ufb00': 'ff',   # ff ligature
-    '\ufb03': 'ffi',  # ffi ligature
-    '\ufb04': 'ffl',  # ffl ligature
+    "\ufb01": "fi",  # fi ligature
+    "\ufb02": "fl",  # fl ligature
+    "\ufb00": "ff",  # ff ligature
+    "\ufb03": "ffi",  # ffi ligature
+    "\ufb04": "ffl",  # ffl ligature
 }
 
 
@@ -94,8 +94,8 @@ def normalize_text(text: str) -> str:
         Normalized text suitable for comparison
     """
     # Remove hyphenation at line breaks
-    text = re.sub(r'-\s*\n\s*', '', text)
-    text = re.sub(r'[\u00ad\u2010\u2011-]\s*\n\s*', '', text)
+    text = re.sub(r"-\s*\n\s*", "", text)
+    text = re.sub(r"[\u00ad\u2010\u2011-]\s*\n\s*", "", text)
 
     # Apply character replacements
     for old, new in DASH_REPLACEMENTS.items():
@@ -106,7 +106,7 @@ def normalize_text(text: str) -> str:
         text = text.replace(old, new)
 
     # Collapse whitespace
-    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r"\s+", " ", text)
     return text.strip()
 
 
@@ -124,13 +124,14 @@ def normalize_for_matching(text: str) -> str:
         Text with all spaces removed, lowercased
     """
     text = normalize_text(text)
-    text = re.sub(r'\s+', '', text)
+    text = re.sub(r"\s+", "", text)
     return text.lower()
 
 
 # =============================================================================
 # Page Text Extraction
 # =============================================================================
+
 
 def _extract_page_spans(page) -> list[dict[str, Any]]:
     """
@@ -150,15 +151,19 @@ def _extract_page_spans(page) -> list[dict[str, Any]]:
             continue
         for line in block["lines"]:
             for span in line["spans"]:
-                spans.append({
-                    "text": span["text"],
-                    "bbox": span["bbox"],
-                })
+                spans.append(
+                    {
+                        "text": span["text"],
+                        "bbox": span["bbox"],
+                    }
+                )
 
     return spans
 
 
-def _build_normalized_text_index(spans: list[dict]) -> tuple[str, list[tuple[int, int, int]]]:
+def _build_normalized_text_index(
+    spans: list[dict],
+) -> tuple[str, list[tuple[int, int, int]]]:
     """
     Build a normalized cumulative text string and index mapping.
 
@@ -218,6 +223,7 @@ def _get_spans_in_range(
 # =============================================================================
 # Coordinate Conversion
 # =============================================================================
+
 
 def _convert_rects_to_zotero(
     bboxes: list[tuple[float, float, float, float]],
@@ -306,6 +312,7 @@ def _build_search_result(
 # Search Strategies
 # =============================================================================
 
+
 def _sliding_window_match(
     text: str,
     pattern: str,
@@ -345,7 +352,7 @@ def _sliding_window_match(
 
     # First pass: find approximate location
     for i in range(0, len(text) - pattern_len + 1, step):
-        window = text_lower[i:i + window_size]
+        window = text_lower[i : i + window_size]
         ratio = SequenceMatcher(None, pattern_lower, window).ratio()
 
         if ratio > best_ratio:
@@ -359,7 +366,7 @@ def _sliding_window_match(
         refine_end = min(len(text) - pattern_len + 1, best_start + step)
 
         for i in range(refine_start, refine_end):
-            window = text_lower[i:i + window_size]
+            window = text_lower[i : i + window_size]
             ratio = SequenceMatcher(None, pattern_lower, window).ratio()
 
             if ratio > best_ratio:
@@ -417,8 +424,11 @@ def _extract_anchor(text: str, from_start: bool) -> str:
         # Find word boundary
         remaining = text[:-ANCHOR_TARGET_LENGTH]
         last_space = remaining.rfind(" ")
-        if last_space != -1 and len(remaining) - last_space < ANCHOR_WORD_BOUNDARY_TOLERANCE:
-            anchor = text[last_space + 1:]
+        if (
+            last_space != -1
+            and len(remaining) - last_space < ANCHOR_WORD_BOUNDARY_TOLERANCE
+        ):
+            anchor = text[last_space + 1 :]
 
     return anchor.strip()
 
@@ -534,7 +544,9 @@ def _fuzzy_search_page(
 
     if match_start != -1:
         match_end = match_start + len(normalized_search)
-        bboxes, texts = _get_spans_in_range(match_start, match_end, span_positions, spans)
+        bboxes, texts = _get_spans_in_range(
+            match_start, match_end, span_positions, spans
+        )
 
         if bboxes:
             return {
@@ -648,6 +660,7 @@ def _search_single_page(
 # Public API
 # =============================================================================
 
+
 def find_text_position(
     pdf_path: str,
     page_num: int,
@@ -721,7 +734,9 @@ def find_text_position(
 
         for page_index in pages_to_search:
             page = doc[page_index]
-            result = _search_single_page(page, page_index, search_text, fuzzy, best_debug)
+            result = _search_single_page(
+                page, page_index, search_text, fuzzy, best_debug
+            )
 
             if result:
                 return result
@@ -731,7 +746,9 @@ def find_text_position(
             "error": f"Could not find text on page {page_num} or neighboring pages",
             "best_match": best_debug["match"],
             "best_score": best_debug["score"],
-            "page_found": best_debug["page"] + 1 if best_debug["page"] is not None else None,
+            "page_found": (
+                best_debug["page"] + 1 if best_debug["page"] is not None else None
+            ),
             "pages_searched": [p + 1 for p in pages_to_search],
         }
 
@@ -810,7 +827,9 @@ def build_annotation_position(page_index: int, rects: list[list[float]]) -> str:
     Returns:
         JSON string for Zotero's annotationPosition field
     """
-    return json.dumps({
-        "pageIndex": page_index,
-        "rects": rects,
-    })
+    return json.dumps(
+        {
+            "pageIndex": page_index,
+            "rects": rects,
+        }
+    )

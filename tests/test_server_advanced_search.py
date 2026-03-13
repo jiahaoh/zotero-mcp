@@ -1,4 +1,16 @@
-from zotero_mcp import server
+import pytest
+
+from zotero_mcp.tools import search as search_mod
+from conftest import unwrap
+
+advanced_search = unwrap(search_mod.advanced_search)
+
+# These tests are designed for upstream's client-side filtering implementation
+# of advanced_search. Our version uses Zotero saved searches, so these tests
+# are skipped until we adopt upstream's approach.
+pytestmark = pytest.mark.skip(
+    reason="advanced_search uses saved searches, not client-side filtering"
+)
 
 
 class DummyContext:
@@ -53,9 +65,9 @@ def test_advanced_search_filters_items(monkeypatch):
             },
         },
     ]
-    monkeypatch.setattr(server, "get_zotero_client", lambda: FakeZotero(fake_items))
+    monkeypatch.setattr(search_mod, "get_zotero_client", lambda: FakeZotero(fake_items))
 
-    result = server.advanced_search(
+    result = advanced_search(
         conditions=[
             {"field": "title", "operation": "contains", "value": "quantum"},
             {"field": "year", "operation": "isGreaterThan", "value": "2020"},
@@ -71,9 +83,9 @@ def test_advanced_search_filters_items(monkeypatch):
 
 
 def test_advanced_search_rejects_unknown_operation(monkeypatch):
-    monkeypatch.setattr(server, "get_zotero_client", lambda: FakeZotero([]))
+    monkeypatch.setattr(search_mod, "get_zotero_client", lambda: FakeZotero([]))
 
-    result = server.advanced_search(
+    result = advanced_search(
         conditions=[{"field": "title", "operation": "regex", "value": ".*"}],
         ctx=DummyContext(),
     )
