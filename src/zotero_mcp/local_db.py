@@ -15,9 +15,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .utils import is_local_mode
 
-# Singleton MarkItDown instance for HTML text extraction.
-_markitdown_instance = None
-
 
 @dataclass
 class ZoteroItem:
@@ -204,14 +201,12 @@ class LocalZoteroReader:
 
     def _extract_text_from_html(self, file_path: Path) -> str:
         """Extract text from HTML using markitdown if available; fallback to stripping tags."""
-        global _markitdown_instance
         # Try markitdown first
         try:
             from markitdown import MarkItDown
 
-            if _markitdown_instance is None:
-                _markitdown_instance = MarkItDown()
-            result = _markitdown_instance.convert(str(file_path))
+            md = MarkItDown()
+            result = md.convert(str(file_path))
             return result.text_content or ""
         except Exception:
             pass
@@ -346,7 +341,6 @@ class LocalZoteroReader:
                    title_val.value as title,
                    abstract_val.value as abstract,
                    url_val.value as url,
-                   doi_val.value as doi,
                    GROUP_CONCAT(
                        CASE
                            WHEN c.firstName IS NOT NULL AND c.lastName IS NOT NULL
@@ -365,9 +359,6 @@ class LocalZoteroReader:
             LEFT JOIN fields url_f ON url_f.fieldName = 'url'
             LEFT JOIN itemData url_data ON i.itemID = url_data.itemID AND url_data.fieldID = url_f.fieldID
             LEFT JOIN itemDataValues url_val ON url_data.valueID = url_val.valueID
-            LEFT JOIN fields doi_f ON doi_f.fieldName = 'DOI'
-            LEFT JOIN itemData doi_data ON i.itemID = doi_data.itemID AND doi_data.fieldID = doi_f.fieldID
-            LEFT JOIN itemDataValues doi_val ON doi_data.valueID = doi_val.valueID
             LEFT JOIN itemCreators ic ON i.itemID = ic.itemID
             LEFT JOIN creators c ON ic.creatorID = c.creatorID
             WHERE i.libraryID = ?
@@ -380,25 +371,41 @@ class LocalZoteroReader:
         return [dict(row) for row in rows]
 
     def search_feed_items_by_title(
-        self, library_id: int, title_query: str, limit: int = 10
+        self, library_id: int, title: str, limit: int = 5
     ) -> list[dict[str, Any]]:
-        """Search feed items by title with case-insensitive substring matching.
-
-        Results are ranked with exact (case-insensitive) matches first,
-        then substring matches, ordered by dateAdded descending.
-        """
+        """Search feed items by title (case-insensitive LIKE match)."""
         conn = self._get_connection()
-        query_lower = title_query.lower()
-        items = self.get_feed_items(library_id, limit=200)
-        exact = []
-        partial = []
-        for item in items:
-            t = (item.get("title") or "").lower()
-            if t == query_lower:
-                exact.append(item)
-            elif query_lower in t:
-                partial.append(item)
-        return (exact + partial)[:limit]
+        rows = conn.execute(
+            """
+            SELECT
+                fi.itemID,
+                idv_title.value AS title,
+                idv_url.value   AS url,
+                idv_abs.value   AS abstract,
+                fi.readTime,
+                fi.dateAdded
+            FROM feedItems fi
+            JOIN items i ON fi.itemID = i.itemID
+            JOIN itemData id_title ON i.itemID = id_title.itemID
+            JOIN itemDataValues idv_title ON id_title.valueID = idv_title.valueID
+            JOIN fields f_title ON id_title.fieldID = f_title.fieldID
+                AND f_title.fieldName = 'title'
+            LEFT JOIN itemData id_url ON i.itemID = id_url.itemID
+            LEFT JOIN itemDataValues idv_url ON id_url.valueID = idv_url.valueID
+            LEFT JOIN fields f_url ON id_url.fieldID = f_url.fieldID
+                AND f_url.fieldName = 'url'
+            LEFT JOIN itemData id_abs ON i.itemID = id_abs.itemID
+            LEFT JOIN itemDataValues idv_abs ON id_abs.valueID = idv_abs.valueID
+            LEFT JOIN fields f_abs ON id_abs.fieldID = f_abs.fieldID
+                AND f_abs.fieldName = 'abstractNote'
+            WHERE i.libraryID = ?
+              AND idv_title.value LIKE ?
+            ORDER BY fi.dateAdded DESC
+            LIMIT ?
+            """,
+            (library_id, f"%{title}%", limit),
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     def get_item_count(self) -> int:
         """

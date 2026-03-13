@@ -16,6 +16,15 @@ import sys
 from pathlib import Path
 
 
+def _obfuscate_sensitive(value: str | None, keep_chars: int = 4) -> str:
+    """Obfuscate sensitive values for terminal display."""
+    if not value:
+        return "Not provided"
+    if len(value) <= keep_chars:
+        return "*" * len(value)
+    return value[:keep_chars] + "*" * (len(value) - keep_chars)
+
+
 def find_executable():
     """Find the full path to the zotero-mcp executable."""
     # Try to find the executable in the PATH
@@ -243,23 +252,7 @@ def setup_semantic_search(
     elif choice == "3":
         config["embedding_model"] = "gemini"
 
-        # Choose Gemini model
-        print("\nGemini embedding models:")
-        print("1. models/text-embedding-004 (recommended)")
-        print("2. models/gemini-embedding-exp-03-07 (experimental)")
-
-        while True:
-            model_choice = input("Choose Gemini model (1-2): ").strip()
-            if model_choice in ["1", "2"]:
-                break
-            print("Please enter 1 or 2")
-
-        if model_choice == "1":
-            config["embedding_config"] = {"model_name": "models/text-embedding-004"}
-        else:
-            config["embedding_config"] = {
-                "model_name": "models/gemini-embedding-exp-03-07"
-            }
+        config["embedding_config"] = {"model_name": "gemini-embedding-001"}
 
         # Get API key
         api_key = getpass.getpass("Enter your Gemini API key (hidden): ").strip()
@@ -687,7 +680,7 @@ def main(cli_args=None):
     print("\nSetup with the following settings:")
     print(f"  Local API: {use_local}")
     if not use_local:
-        print(f"  API Key: {api_key or 'Not provided'}")
+        print(f"  API Key: {_obfuscate_sensitive(api_key)}")
         print(f"  Library ID: {library_id or 'Not provided'}")
         print(f"  Library Type: {library_type}")
 

@@ -94,23 +94,31 @@ def batch_update_tags(
         if not add_tags and not remove_tags:
             return "Error: You must specify either tags to add or tags to remove"
 
-        # Handle case where add_tags might be a JSON string instead of list
-        if add_tags and isinstance(add_tags, str):
-            try:
-                add_tags = json.loads(add_tags)
-                ctx.info(f"Parsed add_tags from JSON string: {add_tags}")
-            except json.JSONDecodeError:
-                return (
-                    f"Error: add_tags appears to be malformed JSON string: {add_tags}"
+        def _normalize_tag_list(
+            raw_value: list[str] | str | None, field_name: str
+        ) -> list[str]:
+            if raw_value is None:
+                return []
+            parsed_value = raw_value
+            if isinstance(parsed_value, str):
+                try:
+                    parsed_value = json.loads(parsed_value)
+                    ctx.info(f"Parsed {field_name} from JSON string: {parsed_value}")
+                except json.JSONDecodeError:
+                    raise ValueError(
+                        f"{field_name} appears to be malformed JSON: {raw_value}"
+                    )
+            if not isinstance(parsed_value, list):
+                raise ValueError(
+                    f"{field_name} must be a JSON array or a list of strings"
                 )
+            return [str(t).strip() for t in parsed_value if str(t).strip()]
 
-        # Handle case where remove_tags might be a JSON string instead of list
-        if remove_tags and isinstance(remove_tags, str):
-            try:
-                remove_tags = json.loads(remove_tags)
-                ctx.info(f"Parsed remove_tags from JSON string: {remove_tags}")
-            except json.JSONDecodeError:
-                return f"Error: remove_tags appears to be malformed JSON string: {remove_tags}"
+        try:
+            add_tags = _normalize_tag_list(add_tags, "add_tags")
+            remove_tags = _normalize_tag_list(remove_tags, "remove_tags")
+        except ValueError as e:
+            return f"Error: {e}"
 
         ctx.info(f"Batch updating tags for items matching '{query}'")
         zot = get_zotero_client()

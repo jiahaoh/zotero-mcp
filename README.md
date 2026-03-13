@@ -13,6 +13,9 @@
   <a href="https://modelcontextprotocol.io/introduction">
     <img src="https://img.shields.io/badge/MCP-0175C2?style=for-the-badge&logoColor=white" alt="MCP">
   </a>
+  <a href="https://pypi.org/project/zotero-mcp-server/">
+    <img src="https://img.shields.io/pypi/v/zotero-mcp-server?style=for-the-badge&logo=pypi&logoColor=white" alt="PyPI">
+  </a>
 </p>
 
 **Zotero MCP** seamlessly connects your [Zotero](https://www.zotero.org/) research library with [ChatGPT](https://openai.com), [Claude](https://www.anthropic.com/claude), and other AI assistants (e.g., [Cherry Studio](https://cherry-ai.com/), [Chorus](https://chorus.sh), [Cursor](https://www.cursor.com/)) via the [Model Context Protocol](https://modelcontextprotocol.io/introduction). Review papers, get summaries, analyze citations, extract PDF annotations, and more!
@@ -55,26 +58,25 @@
 
 ### Default Installation
 
-#### Installing via uv
+#### Installing via uv (recommended)
 
 ```bash
-uv tool install "git+https://github.com/54yyyu/zotero-mcp.git"
+uv tool install zotero-mcp-server
 zotero-mcp setup  # Auto-configure (Claude Desktop supported)
 ```
 
 #### Installing via pip
 
 ```bash
-pip install git+https://github.com/54yyyu/zotero-mcp.git
+pip install zotero-mcp-server
 zotero-mcp setup  # Auto-configure (Claude Desktop supported)
 ```
 
-### Installing via Smithery
-
-To install Zotero MCP via [Smithery](https://smithery.ai/server/@54yyyu/zotero-mcp) for Claude Desktop:
+#### Installing via pipx
 
 ```bash
-npx -y @smithery/cli install @54yyyu/zotero-mcp --client claude
+pipx install zotero-mcp-server
+zotero-mcp setup  # Auto-configure (Claude Desktop supported)
 ```
 
 #### Updating Your Installation
@@ -108,7 +110,7 @@ zotero-mcp setup --semantic-config-only
 **Available Embedding Models:**
 - **Default (all-MiniLM-L6-v2)**: Free, runs locally, good for most use cases
 - **OpenAI**: Better quality, requires API key (`text-embedding-3-small` or `text-embedding-3-large`)
-- **Gemini**: Better quality, requires API key (`models/text-embedding-004` or experimental models)
+- **Gemini**: Better quality, requires API key (`gemini-embedding-001`)
 
 **Update Frequency Options:**
 - **Manual**: Update only when you run `zotero-mcp update-db`
@@ -249,7 +251,7 @@ zotero-mcp setup --no-local --api-key YOUR_API_KEY --library-id YOUR_LIBRARY_ID
 - `OPENAI_EMBEDDING_MODEL`: OpenAI model name (text-embedding-3-small, text-embedding-3-large)
 - `OPENAI_BASE_URL`: Custom OpenAI endpoint URL (optional, for use with compatible APIs)
 - `GEMINI_API_KEY`: Your Gemini API key (for Gemini embeddings)
-- `GEMINI_EMBEDDING_MODEL`: Gemini model name (models/text-embedding-004, etc.)
+- `GEMINI_EMBEDDING_MODEL`: Gemini model name (gemini-embedding-001)
 - `GEMINI_BASE_URL`: Custom Gemini endpoint URL (optional, for use with compatible APIs)
 - `ZOTERO_DB_PATH`: Custom `zotero.sqlite` path (optional)
 
@@ -345,6 +347,14 @@ The first time you use PDF annotation features, the necessary tools will be auto
 ### Update Issues
 - **Update command fails**: Check your internet connection and try `zotero-mcp update --force`
 - **Configuration lost after update**: The update process preserves configs automatically, but check `~/.config/zotero-mcp/` for backup files
+
+## ☕ Support
+
+If you find Zotero MCP useful, consider buying me a coffee!
+
+<a href="https://buymeacoffee.com/stevenyuyy">
+  <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee">
+</a>
 
 ## 📄 License
 

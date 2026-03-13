@@ -293,8 +293,10 @@ def search_notes(query: str, limit: int | str | None = 20, *, ctx: Context) -> s
 
         limit = parse_limit(limit)
 
-        # First search notes
-        zot.add_parameters(q=query, itemType="note", limit=limit or 20)
+        # First search notes (qmode="everything" enables full-text content search)
+        zot.add_parameters(
+            q=query, qmode="everything", itemType="note", limit=limit or 20
+        )
         notes = zot.items()
 
         # Then search annotations (reusing the get_annotations function)
@@ -328,19 +330,29 @@ def search_notes(query: str, limit: int | str | None = 20, *, ctx: Context) -> s
 
         # Filter and highlight notes
         query_lower = query.lower()
+        query_terms = query_lower.split()
         note_results = []
 
         for note in notes:
             data = note.get("data", {})
             note_text = data.get("note", "").lower()
 
-            if query_lower in note_text:
+            if all(term in note_text for term in query_terms):
                 # Prepare full note details
                 note_result = {"type": "note", "key": note.get("key", ""), "data": data}
                 note_results.append(note_result)
 
+        # Keep only annotation blocks that contain the query text
+        annotation_results_filtered = []
+        for annotation in annotations:
+            block_text = "\n".join(annotation.get("lines", []))
+            if query_lower in block_text.lower():
+                annotation_results_filtered.append(annotation)
+
         # Combine and sort results
-        all_results = note_results + annotations
+        all_results = note_results + annotation_results_filtered
+        if not all_results:
+            return f"No results found for '{query}'"
 
         for i, result in enumerate(all_results, 1):
             if result["type"] == "note":

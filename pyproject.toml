@@ -3,12 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "zotero-mcp"
+name = "zotero-mcp-server"
 dynamic = ["version"]
 authors = [
   { name = "54yyyu", email = "54yyyu@github.com" },
 ]
 description = "A Model Context Protocol server for Zotero"
+keywords = ["zotero", "mcp", "model-context-protocol", "research", "citations", "bibliography"]
+license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
@@ -30,23 +32,30 @@ pdf = ["markitdown[pdf]"]
 semantic = ["chromadb>=0.4.0", "sentence-transformers>=2.2.0"]
 openai = ["openai>=1.0.0"]
 gemini = ["google-genai>=0.7.0"]
+annotations = ["pymupdf>=1.24.0", "ebooklib>=0.18", "tiktoken>=0.7.0"]
 all = [
     "zotero-mcp[pdf]",
     "zotero-mcp[semantic]",
     "zotero-mcp[openai]",
     "zotero-mcp[gemini]",
+    "zotero-mcp[annotations]",
 ]
 dev = ["zotero-mcp[all]", "pytest>=7.0.0", "black>=23.0.0", "isort>=5.12.0"]
 
 [project.urls]
 "Homepage" = "https://github.com/54yyyu/zotero-mcp"
 "Bug Tracker" = "https://github.com/54yyyu/zotero-mcp/issues"
+"Documentation" = "https://stevenyuyy.us/zotero-mcp/"
+"Changelog" = "https://github.com/54yyyu/zotero-mcp/blob/main/CHANGELOG.md"
 
 [project.scripts]
 zotero-mcp = "zotero_mcp.cli:main"
 
 [tool.hatch.version]
 path = "src/zotero_mcp/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/zotero_mcp"]
 
 [tool.black]
 line-length = 88

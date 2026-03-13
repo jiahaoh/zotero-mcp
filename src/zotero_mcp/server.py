@@ -10,7 +10,7 @@ provided by the connectors tool module.
 
 import asyncio
 import sys
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastmcp import FastMCP
@@ -20,6 +20,7 @@ from fastmcp import FastMCP
 async def server_lifespan(server: FastMCP):
     """Manage server startup and shutdown lifecycle."""
     sys.stderr.write("Starting Zotero MCP server...\n")
+    background_task: asyncio.Task | None = None
 
     # Check for semantic search auto-update on startup
     try:
@@ -36,7 +37,10 @@ async def server_lifespan(server: FastMCP):
                 # Run update in background to avoid blocking server startup
                 async def background_update():
                     try:
-                        stats = search.update_database(extract_fulltext=False)
+                        # Run sync indexing work in a worker thread.
+                        stats = await asyncio.to_thread(
+                            search.update_database, extract_fulltext=False
+                        )
                         sys.stderr.write(
                             f"Database update completed: {stats.get('processed_items', 0)} items processed\n"
                         )
@@ -44,12 +48,17 @@ async def server_lifespan(server: FastMCP):
                         sys.stderr.write(f"Background database update failed: {e}\n")
 
                 # Start background task
-                asyncio.create_task(background_update())
+                background_task = asyncio.create_task(background_update())
 
     except Exception as e:
         sys.stderr.write(f"Warning: Could not check semantic search auto-update: {e}\n")
 
     yield {}
+
+    if background_task and not background_task.done():
+        background_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await background_task
 
     sys.stderr.write("Shutting down Zotero MCP server...\n")
 

@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from dotenv import load_dotenv
+from markitdown import MarkItDown
 from pyzotero import zotero
 
-from zotero_mcp.utils import format_creators, is_local_mode
+from zotero_mcp.utils import format_creators
 
 # Load environment variables
 load_dotenv()
@@ -20,27 +21,16 @@ load_dotenv()
 # in get_zotero_client(). Keys: "library_id", "library_type".
 _active_library_override: dict[str, str] = {}
 
-# Client cache — avoids re-creating the pyzotero Zotero instance on every
-# tool call when the same parameters apply.
-_client_cache: dict[tuple, zotero.Zotero] = {}
-
-
-def _invalidate_client_cache() -> None:
-    """Clear the client cache so the next get_zotero_client() creates a fresh instance."""
-    _client_cache.clear()
-
 
 def set_active_library(library_id: str, library_type: str) -> None:
     """Set runtime library override for all subsequent get_zotero_client() calls."""
     _active_library_override["library_id"] = library_id
     _active_library_override["library_type"] = library_type
-    _invalidate_client_cache()
 
 
 def clear_active_library() -> None:
     """Clear runtime library override, reverting to environment variable defaults."""
     _active_library_override.clear()
-    _invalidate_client_cache()
 
 
 def get_active_library() -> dict[str, str]:
@@ -78,7 +68,7 @@ def get_zotero_client() -> zotero.Zotero:
         "ZOTERO_LIBRARY_TYPE", "user"
     )
     api_key = os.getenv("ZOTERO_API_KEY")
-    local = is_local_mode()
+    local = os.getenv("ZOTERO_LOCAL", "").lower() in ["true", "yes", "1"]
 
     # For local API, default to user ID 0 if not specified
     if local and not library_id:
@@ -91,18 +81,69 @@ def get_zotero_client() -> zotero.Zotero:
             "or use ZOTERO_LOCAL=true for local Zotero instance."
         )
 
-    cache_key = (library_id, library_type, api_key, local)
-    if cache_key in _client_cache:
-        return _client_cache[cache_key]
-
-    client = zotero.Zotero(
+    return zotero.Zotero(
         library_id=library_id,
         library_type=library_type,
         api_key=api_key,
         local=local,
     )
-    _client_cache[cache_key] = client
-    return client
+
+
+def get_local_zotero_client() -> zotero.Zotero | None:
+    """
+    Get a local Zotero client for file access (WebDAV/local storage).
+
+    This client connects to the local Zotero instance running on port 23119.
+    It's useful for accessing PDF files stored via WebDAV when the main
+    client is configured for web API.
+
+    Returns:
+        A local Zotero client instance, or None if local Zotero is not available.
+    """
+    try:
+        # Create a local client - library_id 0 is the default for local
+        client = zotero.Zotero(
+            library_id="0",
+            library_type="user",
+            api_key=None,
+            local=True,
+        )
+        # Test connection by making a simple request
+        client.items(limit=1)
+        return client
+    except Exception:
+        return None
+
+
+def get_web_zotero_client() -> zotero.Zotero | None:
+    """
+    Get a web API Zotero client for write operations.
+
+    This client connects to the Zotero web API and can create/modify items.
+    Requires ZOTERO_API_KEY and ZOTERO_LIBRARY_ID environment variables.
+
+    Returns:
+        A web API Zotero client instance, or None if credentials are not available.
+    """
+    library_id = os.getenv("ZOTERO_LIBRARY_ID")
+    library_type = os.getenv("ZOTERO_LIBRARY_TYPE", "user")
+    api_key = os.getenv("ZOTERO_API_KEY")
+
+    if not library_id or not api_key:
+        return None
+
+    return zotero.Zotero(
+        library_id=library_id,
+        library_type=library_type,
+        api_key=api_key,
+        local=False,
+    )
+
+
+def is_local_zotero_available() -> bool:
+    """Check if local Zotero instance is running and accessible."""
+    client = get_local_zotero_client()
+    return client is not None
 
 
 def format_item_metadata(item: dict[str, Any], include_abstract: bool = True) -> str:
@@ -369,9 +410,6 @@ def get_attachment_details(
     return None
 
 
-_markitdown_instance = None
-
-
 def convert_to_markdown(file_path: str | Path) -> str:
     """
     Convert a file to markdown using markitdown library.
@@ -383,18 +421,8 @@ def convert_to_markdown(file_path: str | Path) -> str:
         Markdown text.
     """
     try:
-        from markitdown import MarkItDown
-    except ImportError:
-        return (
-            "Error: markitdown is not installed. "
-            "Install it with: pip install zotero-mcp[pdf]"
-        )
-
-    global _markitdown_instance
-    try:
-        if _markitdown_instance is None:
-            _markitdown_instance = MarkItDown()
-        result = _markitdown_instance.convert(str(file_path))
+        md = MarkItDown()
+        result = md.convert(str(file_path))
         return result.text_content
     except Exception as e:
         return f"Error converting file to markdown: {str(e)}"

@@ -23,6 +23,25 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def _is_uv_tool_installation() -> bool:
+    """Check if zotero-mcp is currently installed as a uv tool."""
+    if not shutil.which("uv"):
+        return False
+
+    try:
+        result = subprocess.run(
+            ["uv", "tool", "list"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return result.returncode == 0 and (
+            "zotero-mcp-server" in result.stdout or "zotero-mcp" in result.stdout
+        )
+    except Exception:
+        return False
+
+
 def detect_installation_method() -> str:
     """
     Detect how zotero-mcp was originally installed.
@@ -30,7 +49,15 @@ def detect_installation_method() -> str:
     Returns:
         Installation method: 'uv', 'pipx', 'conda', or 'pip'
     """
-    # Check for uv
+    # Check for uv tool installs first (most reliable uv signal).
+    if _is_uv_tool_installation():
+        return "uv"
+
+    # Check for pipx installation.
+    if is_pipx_installation():
+        return "pipx"
+
+    # Check for uv virtualenv/project installs.
     if shutil.which("uv"):
         # Check if we're in a uv-managed project
         current_dir = Path.cwd()
@@ -60,10 +87,6 @@ def detect_installation_method() -> str:
                 except Exception:
                     pass
 
-    # Check for pipx installation
-    if is_pipx_installation():
-        return "pipx"
-
     # Check for conda environment
     if "CONDA_DEFAULT_ENV" in os.environ or "CONDA_PREFIX" in os.environ:
         return "conda"
@@ -85,7 +108,7 @@ def is_pipx_installation() -> bool:
         )
 
         if result.returncode == 0:
-            return "zotero-mcp" in result.stdout
+            return "zotero-mcp-server" in result.stdout or "zotero-mcp" in result.stdout
 
     except Exception:
         pass
@@ -103,7 +126,7 @@ def get_current_version() -> str | None:
         # Fallback to pip show
         try:
             result = subprocess.run(
-                [sys.executable, "-m", "pip", "show", "zotero-mcp"],
+                [sys.executable, "-m", "pip", "show", "zotero-mcp-server"],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -120,24 +143,33 @@ def get_current_version() -> str | None:
 
 
 def get_latest_version() -> str | None:
-    """Get the latest version from GitHub releases."""
+    """Get the latest version from PyPI (with GitHub releases as fallback)."""
     if not requests:
         logger.warning("requests library not available, cannot check for updates")
         return None
 
+    # Try PyPI first
+    try:
+        response = requests.get(
+            "https://pypi.org/pypi/zotero-mcp-server/json", timeout=10
+        )
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("info", {}).get("version")
+    except Exception as e:
+        logger.warning(f"Could not fetch latest version from PyPI: {e}")
+
+    # Fallback to GitHub releases
     try:
         response = requests.get(
             "https://api.github.com/repos/54yyyu/zotero-mcp/releases/latest", timeout=10
         )
-
         if response.status_code == 200:
             data = response.json()
             tag_name = data.get("tag_name", "")
-            # Remove 'v' prefix if present
             return tag_name.lstrip("v")
-
     except Exception as e:
-        logger.warning(f"Could not fetch latest version: {e}")
+        logger.warning(f"Could not fetch latest version from GitHub: {e}")
 
     return None
 
@@ -274,22 +306,34 @@ def update_via_method(method: str, force: bool = False) -> tuple[bool, str]:
     Returns:
         Tuple of (success, message)
     """
-    repo_url = "git+https://github.com/54yyyu/zotero-mcp.git"
+    package_name = "zotero-mcp-server"
 
     try:
         if method == "uv":
-            cmd = ["uv", "pip", "install", "--upgrade", repo_url]
+            if _is_uv_tool_installation():
+                upgrade_result = subprocess.run(
+                    ["uv", "tool", "upgrade", "zotero-mcp-server"],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+                if upgrade_result.returncode == 0:
+                    return True, "Updated successfully via uv tool"
+
+                # Fall back to a force reinstall for uv tool installs.
+                cmd = ["uv", "tool", "install", "--force", package_name]
+            else:
+                cmd = ["uv", "pip", "install", "--upgrade", package_name]
         elif method == "pip":
-            cmd = [sys.executable, "-m", "pip", "install", "--upgrade", repo_url]
+            cmd = [sys.executable, "-m", "pip", "install", "--upgrade", package_name]
         elif method == "conda":
             # Use pip within conda environment
-            cmd = [sys.executable, "-m", "pip", "install", "--upgrade", repo_url]
+            cmd = [sys.executable, "-m", "pip", "install", "--upgrade", package_name]
         elif method == "pipx":
-            # pipx requires special handling for git URLs
             # First try to upgrade, if that fails, reinstall
             try:
                 result = subprocess.run(
-                    ["pipx", "upgrade", "zotero-mcp"],
+                    ["pipx", "upgrade", "zotero-mcp-server"],
                     capture_output=True,
                     text=True,
                     timeout=300,
@@ -300,11 +344,11 @@ def update_via_method(method: str, force: bool = False) -> tuple[bool, str]:
                 pass
 
             # Fall back to reinstall
-            cmd = ["pipx", "install", "--force", repo_url]
+            cmd = ["pipx", "install", "--force", package_name]
         else:
             return False, f"Unknown installation method: {method}"
 
-        if force and method != "pipx":
+        if force and method != "pipx" and cmd[:3] != ["uv", "tool", "install"]:
             cmd.append("--force-reinstall")
 
         print(f"Running: {' '.join(cmd)}")

@@ -13,23 +13,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-try:
-    import chromadb
-    from chromadb import Documents, EmbeddingFunction, Embeddings
-    from chromadb.config import Settings
-
-    _CHROMADB_AVAILABLE = True
-except ImportError:
-    _CHROMADB_AVAILABLE = False
-    # Provide stub types so class definitions don't fail at import time
-    Documents = list  # type: ignore[misc,assignment]
-    Embeddings = list  # type: ignore[misc,assignment]
-
-    class EmbeddingFunction:  # type: ignore[no-redef]
-        """Stub base class when chromadb is not installed."""
-
-        pass
-
+import chromadb
+from chromadb import Documents, EmbeddingFunction, Embeddings
+from chromadb.config import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +34,8 @@ def suppress_stdout():
 
 class OpenAIEmbeddingFunction(EmbeddingFunction):
     """Custom OpenAI embedding function for ChromaDB."""
+
+    max_input_tokens = 8000  # text-embedding-3-* limit is 8191
 
     def __init__(
         self,
@@ -71,9 +59,19 @@ class OpenAIEmbeddingFunction(EmbeddingFunction):
         except ImportError:
             raise ImportError("openai package is required for OpenAI embeddings")
 
-    def name(self) -> str:
-        """Return the name of this embedding function."""
+    @staticmethod
+    def name() -> str:
         return "openai"
+
+    def get_config(self) -> Dict[str, Any]:
+        return {"model_name": self.model_name, "base_url": self.base_url}
+
+    @staticmethod
+    def build_from_config(config: Dict[str, Any]) -> "OpenAIEmbeddingFunction":
+        return OpenAIEmbeddingFunction(
+            model_name=config.get("model_name", "text-embedding-3-small"),
+            base_url=config.get("base_url"),
+        )
 
     def __call__(self, input: Documents) -> Embeddings:
         """Generate embeddings using OpenAI API."""
@@ -84,9 +82,11 @@ class OpenAIEmbeddingFunction(EmbeddingFunction):
 class GeminiEmbeddingFunction(EmbeddingFunction):
     """Custom Gemini embedding function for ChromaDB using google-genai."""
 
+    max_input_tokens = 2000  # gemini-embedding-001 limit is 2048
+
     def __init__(
         self,
-        model_name: str = "models/text-embedding-004",
+        model_name: str = "gemini-embedding-001",
         api_key: str | None = None,
         base_url: str | None = None,
     ):
@@ -111,9 +111,19 @@ class GeminiEmbeddingFunction(EmbeddingFunction):
         except ImportError:
             raise ImportError("google-genai package is required for Gemini embeddings")
 
-    def name(self) -> str:
-        """Return the name of this embedding function."""
+    @staticmethod
+    def name() -> str:
         return "gemini"
+
+    def get_config(self) -> Dict[str, Any]:
+        return {"model_name": self.model_name, "base_url": self.base_url}
+
+    @staticmethod
+    def build_from_config(config: Dict[str, Any]) -> "GeminiEmbeddingFunction":
+        return GeminiEmbeddingFunction(
+            model_name=config.get("model_name", "gemini-embedding-001"),
+            base_url=config.get("base_url"),
+        )
 
     def __call__(self, input: Documents) -> Embeddings:
         """Generate embeddings using Gemini API."""
@@ -146,9 +156,21 @@ class HuggingFaceEmbeddingFunction(EmbeddingFunction):
                 "sentence-transformers package is required for HuggingFace embeddings. Install with: pip install sentence-transformers"
             )
 
-    def name(self) -> str:
-        """Return the name of this embedding function."""
-        return f"huggingface-{self.model_name}"
+        # Read limit from model metadata; conservative fallback
+        self.max_input_tokens = getattr(self.model, "max_seq_length", 500)
+
+    @staticmethod
+    def name() -> str:
+        return "huggingface"
+
+    def get_config(self) -> Dict[str, Any]:
+        return {"model_name": self.model_name}
+
+    @staticmethod
+    def build_from_config(config: Dict[str, Any]) -> "HuggingFaceEmbeddingFunction":
+        return HuggingFaceEmbeddingFunction(
+            model_name=config.get("model_name", "Qwen/Qwen3-Embedding-0.6B"),
+        )
 
     def __call__(self, input: Documents) -> Embeddings:
         """Generate embeddings using HuggingFace model."""
@@ -175,12 +197,6 @@ class ChromaClient:
             embedding_model: Model to use for embeddings ('default', 'openai', 'gemini', 'qwen', 'embeddinggemma', or HuggingFace model name)
             embedding_config: Configuration for the embedding model
         """
-        if not _CHROMADB_AVAILABLE:
-            raise ImportError(
-                "chromadb is not installed. Semantic search requires the 'semantic' extra. "
-                "Install it with: pip install zotero-mcp[semantic]"
-            )
-
         self.collection_name = collection_name
         self.embedding_model = embedding_model
         self.embedding_config = embedding_config or {}
@@ -204,33 +220,28 @@ class ChromaClient:
             # Set up embedding function
             self.embedding_function = self._create_embedding_function()
 
-            # Get or create collection with embedding function handling
+            # Get or create collection with the configured embedding function.
+            # If the user switched embedding models, the persisted collection
+            # will conflict with the new function.  Drop and recreate in that
+            # case so the database is rebuilt with the correct embeddings.
             try:
-                # Try to get existing collection first
-                self.collection = self.client.get_collection(name=self.collection_name)
-
-                # Check if embedding functions are compatible
-                existing_ef = getattr(self.collection, "_embedding_function", None)
-                if existing_ef is not None:
-                    existing_name = getattr(existing_ef, "name", lambda: "default")()
-                    new_name = getattr(
-                        self.embedding_function, "name", lambda: "default"
-                    )()
-
-                    if existing_name != new_name:
-                        # Log to stderr instead of letting ChromaDB print to stdout
-                        sys.stderr.write(
-                            f"ChromaDB: Collection exists with different embedding function: {existing_name} vs {new_name}\n"
-                        )
-                        # Use the existing collection's embedding function to avoid conflicts
-                        self.embedding_function = existing_ef
-
-            except Exception:
-                # Collection doesn't exist, create it
-                self.collection = self.client.create_collection(
+                self.collection = self.client.get_or_create_collection(
                     name=self.collection_name,
                     embedding_function=self.embedding_function,
                 )
+            except Exception as e:
+                if "embedding function conflict" in str(e).lower():
+                    logger.warning(
+                        f"Embedding model changed to '{self.embedding_model}'. "
+                        "Resetting collection for rebuild."
+                    )
+                    self.client.delete_collection(name=self.collection_name)
+                    self.collection = self.client.create_collection(
+                        name=self.collection_name,
+                        embedding_function=self.embedding_function,
+                    )
+                else:
+                    raise
 
     def _create_embedding_function(self) -> EmbeddingFunction:
         """Create the appropriate embedding function based on configuration."""
@@ -245,9 +256,7 @@ class ChromaClient:
             )
 
         elif self.embedding_model == "gemini":
-            model_name = self.embedding_config.get(
-                "model_name", "models/text-embedding-004"
-            )
+            model_name = self.embedding_config.get("model_name", "gemini-embedding-001")
             api_key = self.embedding_config.get("api_key")
             base_url = self.embedding_config.get("base_url")
             return GeminiEmbeddingFunction(
@@ -272,7 +281,14 @@ class ChromaClient:
 
         else:
             # Use ChromaDB's default embedding function (all-MiniLM-L6-v2)
-            return chromadb.utils.embedding_functions.DefaultEmbeddingFunction()
+            ef = chromadb.utils.embedding_functions.DefaultEmbeddingFunction()
+            ef.max_input_tokens = 256  # all-MiniLM-L6-v2 max_seq_length
+            return ef
+
+    @property
+    def embedding_max_tokens(self) -> int:
+        """Maximum input tokens supported by the configured embedding model."""
+        return getattr(self.embedding_function, "max_input_tokens", 8000)
 
     def add_documents(
         self, documents: list[str], metadatas: list[dict[str, Any]], ids: list[str]
@@ -416,6 +432,16 @@ class ChromaClient:
         except Exception:
             return None
 
+    def get_existing_ids(self, ids: list[str]) -> set[str]:
+        """Return the subset of ids that already exist in the collection."""
+        if not ids:
+            return set()
+        try:
+            result = self.collection.get(ids=ids, include=[])
+            return set(result.get("ids", []))
+        except Exception:
+            return set()
+
 
 def create_chroma_client(config_path: str | None = None) -> ChromaClient:
     """
@@ -463,7 +489,7 @@ def create_chroma_client(config_path: str | None = None) -> ChromaClient:
 
     elif config["embedding_model"] == "gemini":
         gemini_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        gemini_model = os.getenv("GEMINI_EMBEDDING_MODEL", "models/text-embedding-004")
+        gemini_model = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
         gemini_base_url = os.getenv("GEMINI_BASE_URL")
         if gemini_api_key:
             config["embedding_config"] = {
