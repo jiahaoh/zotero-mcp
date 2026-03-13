@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from dotenv import load_dotenv
-from markitdown import MarkItDown
 from pyzotero import zotero
 
 from zotero_mcp.utils import format_creators
@@ -421,8 +420,12 @@ def convert_to_markdown(file_path: str | Path) -> str:
         Markdown text.
     """
     try:
+        from markitdown import MarkItDown
+
         md = MarkItDown()
         result = md.convert(str(file_path))
         return result.text_content
+    except ImportError:
+        return "Error: markitdown not installed. Install with: pip install 'zotero-mcp[pdf]'"
     except Exception as e:
         return f"Error converting file to markdown: {str(e)}"
