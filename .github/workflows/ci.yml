@@ -24,7 +24,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
 
       - name: Install dependencies
-        run: uv pip install --system -e ".[dev]"
+        run: uv pip install --system -e "." pytest black isort
 
       - name: Run tests
         run: pytest tests/ -v
