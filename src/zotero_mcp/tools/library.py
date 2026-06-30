@@ -833,6 +833,22 @@ def add_to_library(
     if not item_key:
         return "Failed to create item. Check Zotero is running and accessible."
 
+    # The connector API doesn't honour the ``collections`` field in the
+    # template — it uses session-based targeting instead.  Explicitly patch
+    # the item's collections list so that downstream tools (e.g.
+    # remove_items_from_collection) can read the membership correctly.
+    if use_connector and collection_key:
+        try:
+            _zot = write_zot or get_zotero_client()
+            created_item = _zot.item(item_key)
+            existing = created_item["data"].get("collections", [])
+            if collection_key not in existing:
+                existing.append(collection_key)
+                created_item["data"]["collections"] = existing
+                _zot.update_item(created_item)
+        except Exception:
+            pass  # best-effort; item was still created
+
     # --- 7. Download & attach PDF (best-effort) ---
     pdf_status = "not attempted"
     if download_pdf:

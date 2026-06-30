@@ -383,7 +383,7 @@ class LocalZoteroReader:
                 idv_url.value   AS url,
                 idv_abs.value   AS abstract,
                 fi.readTime,
-                fi.dateAdded
+                i.dateAdded
             FROM feedItems fi
             JOIN items i ON fi.itemID = i.itemID
             JOIN itemData id_title ON i.itemID = id_title.itemID
@@ -400,7 +400,7 @@ class LocalZoteroReader:
                 AND f_abs.fieldName = 'abstractNote'
             WHERE i.libraryID = ?
               AND idv_title.value LIKE ?
-            ORDER BY fi.dateAdded DESC
+            ORDER BY i.dateAdded DESC
             LIMIT ?
             """,
             (library_id, f"%{title}%", limit),

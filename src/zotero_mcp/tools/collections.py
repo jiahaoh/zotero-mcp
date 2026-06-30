@@ -2,9 +2,24 @@
 
 from fastmcp import Context
 
-from zotero_mcp.client import get_zotero_client
+from zotero_mcp.client import get_web_zotero_client, get_zotero_client
 from zotero_mcp.server import mcp
-from zotero_mcp.utils import format_item_list, parse_limit
+from zotero_mcp.utils import format_item_list, is_local_mode, parse_limit
+
+
+def _get_write_zot():
+    """Return a write-capable Zotero client.
+
+    In local mode the default client is read-only (localhost:23119 doesn't
+    support POST/PATCH/DELETE).  Fall back to the web API client when
+    available, otherwise return the default client (caller will get an error
+    on write).
+    """
+    if is_local_mode():
+        web = get_web_zotero_client()
+        if web is not None:
+            return web
+    return get_zotero_client()
 
 
 @mcp.tool(
@@ -174,13 +189,13 @@ def create_collection(
             return "Error: Collection name must be provided"
 
         ctx.info(f"Creating collection '{name}'")
-        zot = get_zotero_client()
+        write_zot = _get_write_zot()
 
         payload: dict = {"name": name}
         if parent_collection_key:
             payload["parentCollection"] = parent_collection_key
 
-        result = zot.create_collections([payload])
+        result = write_zot.create_collections([payload])
 
         # pyzotero returns a dict with 'successful', 'unchanged', 'failed' keys
         successful = result.get("successful", {})
@@ -238,19 +253,23 @@ def add_items_to_collection(
 
         ctx.info(f"Adding {len(item_keys)} items to collection {collection_key}")
         zot = get_zotero_client()
+        write_zot = _get_write_zot()
 
         added = 0
         skipped = 0
         for key in item_keys:
             try:
-                item = zot.item(key)
+                try:
+                    item = write_zot.item(key)
+                except Exception:
+                    item = zot.item(key)
                 collections = item["data"].get("collections", [])
                 if collection_key in collections:
                     skipped += 1
                     continue
                 collections.append(collection_key)
                 item["data"]["collections"] = collections
-                zot.update_item(item)
+                write_zot.update_item(item)
                 added += 1
             except Exception as e:
                 ctx.error(f"Failed to add item {key}: {e}")
@@ -293,19 +312,40 @@ def remove_items_from_collection(
 
         ctx.info(f"Removing {len(item_keys)} items from collection {collection_key}")
         zot = get_zotero_client()
+        write_zot = _get_write_zot()
+
+        # Pre-fetch collection members so we can detect items whose
+        # ``collections`` field isn't populated by the local API.
+        try:
+            coll_items = zot.collection_items(collection_key, limit=100)
+            coll_member_keys = {ci.get("key") for ci in coll_items}
+        except Exception:
+            coll_member_keys = set()
 
         removed = 0
         skipped = 0
         for key in item_keys:
             try:
-                item = zot.item(key)
+                # Read from whichever client has the data; prefer write
+                # client so the version tag matches for the update call.
+                try:
+                    item = write_zot.item(key)
+                except Exception:
+                    item = zot.item(key)
                 collections = item["data"].get("collections", [])
                 if collection_key not in collections:
-                    skipped += 1
-                    continue
+                    # Local API may omit the collections field for items
+                    # added via the connector or after recent sync.  Fall
+                    # back to the collection-items query to confirm.
+                    if key not in coll_member_keys:
+                        skipped += 1
+                        continue
+                    # Item IS in the collection — patch the list so the
+                    # update below sends the correct value.
+                    collections.append(collection_key)
                 collections.remove(collection_key)
                 item["data"]["collections"] = collections
-                zot.update_item(item)
+                write_zot.update_item(item)
                 removed += 1
             except Exception as e:
                 ctx.error(f"Failed to remove item {key}: {e}")
@@ -354,12 +394,16 @@ def move_items_between_collections(
             f"Moving {len(item_keys)} items from {source_collection_key} → {target_collection_key}"
         )
         zot = get_zotero_client()
+        write_zot = _get_write_zot()
 
         moved = 0
         failed = 0
         for key in item_keys:
             try:
-                item = zot.item(key)
+                try:
+                    item = write_zot.item(key)
+                except Exception:
+                    item = zot.item(key)
                 collections = item["data"].get("collections", [])
                 changed = False
                 if target_collection_key not in collections:
@@ -370,7 +414,7 @@ def move_items_between_collections(
                     changed = True
                 if changed:
                     item["data"]["collections"] = collections
-                    zot.update_item(item)
+                    write_zot.update_item(item)
                     moved += 1
             except Exception as e:
                 ctx.error(f"Failed to move item {key}: {e}")
@@ -412,12 +456,12 @@ def rename_collection(
             return "Error: collection_key and new_name must be provided"
 
         ctx.info(f"Renaming collection {collection_key} → '{new_name}'")
-        zot = get_zotero_client()
+        write_zot = _get_write_zot()
 
-        collection = zot.collection(collection_key)
+        collection = write_zot.collection(collection_key)
         old_name = collection["data"].get("name", "Unnamed")
         collection["data"]["name"] = new_name
-        zot.update_collection(collection)
+        write_zot.update_collection(collection)
 
         return (
             f"# Collection Renamed\n\n"
@@ -455,6 +499,7 @@ def delete_collection(
 
         ctx.info(f"Deleting collection {collection_key}")
         zot = get_zotero_client()
+        write_zot = _get_write_zot()
 
         # Get collection info before deleting
         collection = zot.collection(collection_key)
@@ -481,12 +526,12 @@ def delete_collection(
                     continue
                 try:
                     item["data"]["deleted"] = True
-                    zot.update_item(item)
+                    write_zot.update_item(item)
                     trashed += 1
                 except Exception as e:
                     ctx.error(f"Failed to trash item {item.get('key', '?')}: {e}")
 
-        zot.delete_collection(collection)
+        write_zot.delete_collection(collection)
 
         items_msg = f"\n**Items trashed:** {trashed}" if delete_items else ""
         return (
